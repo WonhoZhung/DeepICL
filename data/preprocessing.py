@@ -1,5 +1,5 @@
 from multiprocessing import Pool
-from pdbbind2 import PDBbindDataProcessor
+from processor import PDBbindDataProcessor
 
 import pickle
 import os
@@ -35,13 +35,6 @@ preprocessor = PDBbindDataProcessor(
 print("NUM DATA:", preprocessor.num_data)
 time.sleep(2.0)
 
-"""
-for i in range(preprocessor.num_data):
-    preprocessor.run(i)
-
-
-exit()
-"""
 
 # 2. Run preprocessor
 st = time.time()

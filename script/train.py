@@ -34,8 +34,8 @@ def train(model, args, optimizer, data, train, device=None, scaler=None):
     model.train() if train else model.eval()
 
     i_batch = 0
-    total_losses, vae_losses, type_losses, dist_losses = \
-            [], [], [], []
+    total_losses, vae_losses, type_losses, dist_losses, ssl_losses = \
+            [], [], [], [], []
     while True:
         sample = next(data, None)
         if sample is None:
@@ -46,13 +46,13 @@ def train(model, args, optimizer, data, train, device=None, scaler=None):
         if args.autocast:
             with amp.autocast():
                 try:
-                    total_loss, vae_loss, type_loss, dist_loss = model(sample)
+                    total_loss, vae_loss, type_loss, dist_loss, ssl_loss = model(sample)
                 except Exception as e:
                     print(traceback.format_exc())
                     exit()
         else:
             try:
-                total_loss, vae_loss, type_loss, dist_loss = model(sample)
+                total_loss, vae_loss, type_loss, dist_loss, ssl_loss = model(sample)
             except Exception as e:
                 print(traceback.format_exc())
                 exit()
@@ -70,13 +70,18 @@ def train(model, args, optimizer, data, train, device=None, scaler=None):
         type_losses.append(type_loss.data.cpu().numpy())
         dist_losses.append(dist_loss.data.cpu().numpy())
         total_losses.append(total_loss.data.cpu().numpy())
+        if args.ssl:
+            ssl_losses.append(ssl_loss.data.cpu().numpy())
 
     vae_losses = np.mean(np.array(vae_losses))
     type_losses = np.mean(np.array(type_losses))
     dist_losses = np.mean(np.array(dist_losses))
     total_losses = np.mean(np.array(total_losses))
+    if args.ssl:
+        ssl_losses = np.mean(np.array(ssl_losses))
+        return total_losses, vae_losses, type_losses, dist_losses, ssl_losses
 
-    return total_losses, vae_losses, type_losses, dist_losses
+    return total_losses, vae_losses, type_losses, dist_losses, 0.0
 
 
 def main_worker(gpu, ngpus_per_node, args):
@@ -107,7 +112,6 @@ def main_worker(gpu, ngpus_per_node, args):
     # Dataloader
     train_dataset = PDBbindDataset(args, mode='train')
     valid_dataset = PDBbindDataset(args, mode='valid')
-    #test_dataset = PDBbindDataset(args, mode='test')
 
     ############ Distributed Data Parallel #############
     train_sampler = DistributedSampler(
@@ -148,13 +152,12 @@ def main_worker(gpu, ngpus_per_node, args):
     model = DeepSLIP(args)
     torch.cuda.set_device(gpu)
     model.cuda(gpu)
-    #model = utils.load_save_file(model, args.world_size > 0, args.restart_file)
     model = utils.initialize_model(model, args.world_size > 0, args.restart_file)
 
     ############ Distributed Data Parallel #############
     # Wrap the model
-    #model = DDP(model, device_ids=[gpu], find_unused_parameters=True)
-    model = DDP(model, device_ids=[gpu])
+    model = DDP(model, device_ids=[gpu], find_unused_parameters=True)
+    #model = DDP(model, device_ids=[gpu])
     cudnn.benchmark = True
     ####################################################
 
@@ -187,16 +190,18 @@ def main_worker(gpu, ngpus_per_node, args):
         start_epoch = 0
 
     best_epoch = 0
-    min_test_loss = 1e6
+    min_valid_loss = 1e6
     lr_tick = 0
     for epoch in range(start_epoch, args.num_epochs):
         if epoch == 0 and rank == 0:
             print(f"EPOCH || " + \
                   f"TRA_VAE | " + \
+                  f"TRA_SSL | " + \
                   f"TRA_TYPE | " + \
                   f"TRA_DIST | " + \
                   f"TRA_TOT || " + \
                   f"VAL_VAE | " + \
+                  f"VAL_SSL | " + \
                   f"VAL_TYPE | " + \
                   f"VAL_DIST | " + \
                   f"VAL_TOT || " + \
@@ -209,12 +214,13 @@ def main_worker(gpu, ngpus_per_node, args):
         
         # KL annealing
         args.vae_coeff = vae_coeff_final + \
-                (vae_coeff_init - vae_coeff_final) * ((1 - args.beta)**epoch)
+                (vae_coeff_init - vae_coeff_final) * \
+                ((1 - args.vae_loss_beta)**epoch)
 
         st = time.time()
 
         train_total_losses, train_vae_losses, train_type_losses, \
-                train_dist_losses, = \
+                train_dist_losses, train_ssl_losses = \
                 train(
                         model=model, 
                         args=args,
@@ -225,9 +231,9 @@ def main_worker(gpu, ngpus_per_node, args):
                         scaler=scaler
                 )
         
-        # actually a validation process
-        test_total_losses, test_vae_losses, test_type_losses, \
-                test_dist_losses = \
+        # validation process
+        valid_total_losses, valid_vae_losses, valid_type_losses, \
+                valid_dist_losses, valid_ssl_losses = \
                 train(
                         model=model, 
                         args=args,
@@ -240,8 +246,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
         et = time.time()
         
-        if test_total_losses < min_test_loss:
-            min_test_loss = test_total_losses
+        if valid_total_losses < min_valid_loss:
+            min_valid_loss = valid_total_losses
             best_epoch = epoch
             lr_tick = 0
         else:
@@ -256,16 +262,18 @@ def main_worker(gpu, ngpus_per_node, args):
         if rank == 0:
             print(f"{epoch} || " + \
                   f"{train_vae_losses:.3f} | " + \
+                  f"{train_ssl_losses:.3f} | " + \
                   f"{train_type_losses:.3f} | " + \
                   f"{train_dist_losses:.3f} | " + \
                   f"{train_total_losses:.3f} || " + \
-                  f"{test_vae_losses:.3f} | " + \
-                  f"{test_type_losses:.3f} | " + \
-                  f"{test_dist_losses:.3f} | " + \
-                  f"{test_total_losses:.3f} || " + \
+                  f"{valid_vae_losses:.3f} | " + \
+                  f"{valid_ssl_losses:.3f} | " + \
+                  f"{valid_type_losses:.3f} | " + \
+                  f"{valid_dist_losses:.3f} | " + \
+                  f"{valid_total_losses:.3f} || " + \
                   f"{(et - st):.2f} | " + \
                   f"{[group['lr'] for group in optimizer.param_groups][0]:.4f} | " + \
-                  f"{best_epoch}", flush=True)
+                  f"{best_epoch}{'*' if lr_tick==0 else ''}", flush=True)
 
 
         # Save model

@@ -63,8 +63,7 @@ class IAGMN_Layer(nn.Module): # Invariant Attention Graph Matching Network
                         self.hidden_feature
                 )
 
-        self.radial_cutoff = 10. # TODO
-        #self.radial_cutoff = args.dist_one_hot_param1[1]
+        self.radial_cutoff = args.dist_one_hot_param1[1]
 
 
     def compute_cross_attn(
@@ -203,21 +202,58 @@ class EGCL(nn.Module):
         return h_prime, x_prime
 
 
-class ShiftedSoftplus(nn.Module):
-    r"""
-    Shited-softplus activated function
-    """
+class ConstrainedCrossAttention(nn.Module):
 
     def __init__(
             self,
+            args
             ):
-        super().__init__()
+        
+        self.args = args
+
+        self.qkv_proj = nn.Linear(args.num_hidden_feature, \
+                3*args.num_hidden_feature) # q, k, v
+        self.b_proj = nn.Linear(args.num_hidden_feature, 1)
+        self.g_proj = nn.Linear(args.num_hidden_feature, 1)
+        self.t_proj = nn.Linear(args.dist_one_hot_param1[-1], 1)
+
+        self.dist_expand = SoftOneHot(*args.dist_one_hot_param1)
+    
+    def attention(
+            self,
+            h,
+            x,
+            batch,
+            length,
+            ):
+
+        sqrt_len = torch.pow(length, -0.5)[batch] # 1 / sqrt(c)
+        mask = torch.block_diag(*[torch.ones((c, c), device=h.device) for \
+                c in length.long()])
+        intra_dist = self.dist_expand(torch.cdist(x, x))
+        
+        qkv_proj = self.qkv_proj(h)
+        q, k, v = qkv_proj.chunk(3, dim=-1)
+        t = self.t_proj(intra_dist).squeeze(-1)
+        b = self.b_proj(h).repeat(1, h.shape[0])
+        g = torch.sigmoid(self.g_proj(h))
+        attn_logits = torch.matmul(q, k.transpose(-2, -1)) * sqrt_len.unsqueeze(-1)
+
+        attn_logits = attn_logits + b + t
+        attn_logits = attn_logits.masked_fill(mask==0, -9e15)
+        attention = F.softmax(attn_logits, dim=-1)
+        values = torch.matmul(attention, v) * g + h
+        return values
 
     def forward(
             self,
-            input
+            h,
+            x,
+            batch
             ):
-        return F.softplus(input) - np.log(2.0)
+        ones = batch.new_ones(batch.shape)
+        length = scatter_add(ones, batch, 0).long()
+        return self.attention(h, batch, length, x)
 
 
 class SoftOneHot(nn.Module):

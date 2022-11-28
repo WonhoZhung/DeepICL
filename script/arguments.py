@@ -42,6 +42,7 @@ def train_args_parser():
     parser.add_argument("--conditional", help="conditional", action="store_true")
     parser.add_argument("--num_cond_feature", help="num condition features", \
             type=int, default=utils.NUM_INTERACTION_TYPES)
+    parser.add_argument("--ssl", help="semi-supervised learning", action="store_true")
     
     # TRAINING SETTINGS
     parser.add_argument("--num_epochs", help="num epochs", type=int)            
@@ -96,6 +97,7 @@ def generate_args_parser():
     parser.add_argument("--conditional", help="conditional", action="store_true")
     parser.add_argument("--num_cond_feature", help="num condition features", \
             type=int, default=utils.NUM_INTERACTION_TYPES)
+    parser.add_argument("--ssl", help="semi-supervised learning", action="store_true")
     
     # GENERATING SETTINGS
     parser.add_argument("--k", help="k for k-NN parameter", type=int)

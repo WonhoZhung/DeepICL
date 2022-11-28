@@ -140,12 +140,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--result_dir", help="result_dir", type=str, \
-            default="results/exp_0_0")
+            default="results/exp_0_2")
     parser.add_argument("--key_dir", help="key_dir", type=str, \
-    #        default=None)
-            default="../data_new/generate_keys/test_keys.pkl")
+            default="../data/generate_keys/test_keys.pkl")
     parser.add_argument("--smi_dir", help="smi_dir", type=str, \
-            default="../data/keys/train_smiles.txt")
+            default="../../gschnet/DeepSLIP/data/keys/train_smiles.txt")
     parser.add_argument("--filter_level", help="filter_level", type=int, \
             default=0)
 

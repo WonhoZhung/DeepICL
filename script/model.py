@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from torch_scatter import scatter_add, scatter_mean, scatter_max
-from layers import IAGMN_Layer, EGCL, SoftOneHot
+from layers import IAGMN_Layer, EGCL, ConstrainedCrossAttention, SoftOneHot
 from math import pi as PI
 
 
@@ -42,7 +42,8 @@ class DeepSLIP(nn.Module):
         self.next_dist_lp = NextDist(args, self.embedding.l_node_emb)
 
         self.loss_fn = nn.KLDivLoss(reduction="none")
-        self.ssl_loss_fn = nn.CrossEntropyLoss(reduction="none")
+        if args.ssl:
+            self.ssl_loss_fn = nn.CrossEntropyLoss(reduction="none")
 
     def forward(
             self,
@@ -109,7 +110,7 @@ class DeepSLIP(nn.Module):
 
         if self.args.ssl:
             cond_pred = self.ssl_model(whole)
-            ssl_loss = self.ssl_loss_fn(cond_pred, whole_cond.argmax(-1))
+            ssl_loss = self.ssl_loss_fn(cond_pred, whole_cond.argmax(-1)).mean()
             total_loss += ssl_loss
             return total_loss, vae_loss, type_loss, dist_loss, ssl_loss
         
@@ -266,41 +267,12 @@ class NextDist(nn.Module):
             layers.append(self.last_act)
 
         self.dense = nn.Sequential(*layers)
+
+        self.use_attention = False # TODO
+        if self.use_attention:
+            # Constrained cross attention from E3Bind
+            self.attn = ConstrainedCrossAttention(args)
         
-        self.qkv_proj = nn.Linear(args.num_hidden_feature, \
-                3*args.num_hidden_feature) # q, k, v
-        self.b_proj = nn.Linear(args.num_hidden_feature, 1)
-        self.g_proj = nn.Linear(args.num_hidden_feature, 1)
-        self.t_proj = nn.Linear(args.dist_one_hot_param1[-1], 1)
-
-        self.dist_expand = SoftOneHot(*args.dist_one_hot_param1)
-
-    def constrained_attention(
-            self,
-            h,
-            batch,
-            length,
-            coord
-            ):
-
-        sqrt_len = torch.pow(length, -0.5)[batch] # 1 / sqrt(c)
-        mask = torch.block_diag(*[torch.ones((c, c), device=h.device) for \
-                c in length.long()])
-        intra_dist = self.dist_expand(torch.cdist(coord, coord))
-        
-        qkv_proj = self.qkv_proj(h)
-        q, k, v = qkv_proj.chunk(3, dim=-1)
-        t = self.t_proj(intra_dist).squeeze(-1)
-        b = self.b_proj(h).repeat(1, h.shape[0])
-        g = torch.sigmoid(self.g_proj(h))
-        attn_logits = torch.matmul(q, k.transpose(-2, -1)) * sqrt_len.unsqueeze(-1)
-
-        attn_logits = attn_logits + b + t
-        attn_logits = attn_logits.masked_fill(mask==0, -9e15)
-        attention = F.softmax(attn_logits, dim=-1)
-        values = torch.matmul(attention, v) * g + h
-        return values
-
     def forward(
             self,
             data,
@@ -309,11 +281,10 @@ class NextDist(nn.Module):
             ):
 
         batch = data[key].batch
-        ones = batch.new_ones(batch.shape)
-        length = scatter_add(ones, batch, 0).long()
         type_embed = self.embedding(next_type)[batch] # [N, num_hidden]
         dist_embed = data[key].h * type_embed
-        dist_embed = self.constrained_attention(dist_embed, batch, length, data[key].pos)
+        if self.use_attention:
+            dist_embed = self.attn(dist_embed, data[key].pos, batch)
         next_dist = F.log_softmax(self.dense(dist_embed), dim=-1)
         return next_dist
 
@@ -367,16 +338,26 @@ class SSLModel(nn.Module):
 
     def __init__(
             self,
-            args
+            args,
+            embedding=None
             ):
         super().__init__()
 
         self.args = args
+
+        if embedding is not None:
+            self.embedding = embedding
+        else:
+            self.embedding = nn.Linear(
+                            args.num_pocket_atom_feature,
+                            args.num_hidden_feature,
+                            bias=False
+                    )
         
-        self.num_layers = args.num_layers
+        self.num_layers = args.num_dense_layers
         self.layers = nn.ModuleList([EGCL(args) for _ in range(self.num_layers)])
         self.fc_layer = nn.Linear(
-                args.num_pocket_atom_feature,
+                args.num_hidden_feature,
                 args.num_cond_feature
         )
 

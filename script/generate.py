@@ -199,7 +199,8 @@ class Generator(DataProcessor):
             p_cond = p_dict["p_cond"]
         else:
             # No interaction conditioning
-            p_cond = torch.tensor([[0, 0, 0, 1]]).repeat(p_dict["p_n"], 1)
+            blank = torch.eye(utils.NUM_INTERACTION_TYPES)[-1].unsqueeze(0)
+            p_cond = blank.repeat(p_dict["p_n"], 1)
         
         i = 0
         l_Z_init = self.o_Z
