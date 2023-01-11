@@ -27,7 +27,19 @@ ATOM_TYPES = ['C', 'N', 'O', 'F', 'P', 'S', 'Cl', 'Br']
 AA_TYPES = ["GLY", "ALA", "VAL", "LEU", "ILE", "PHE", "PRO", "MET", "TRP", \
             "SER", "THR", "TYR", "CYS", "ARG", "HIS", "LYS", "ASN", "ASP", \
             "GLN", "GLU"]
-INTERACTION_TYPES = ["pipi", "salt", "hbond", "hydro"]
+#INTERACTION_TYPES = ["pipi", "salt", "hbond", "hydro"]
+INTERACTION_TYPES = ["pipi", "anion", "cation", "hbd", "hba", "hydro"]
+HYDROPHOBICS = ["F", "CL", "BR", "I"]
+HBOND_DONOR_SMARTS = ["[!#6;!H0]"]
+HBOND_ACCEPTOR_SMARTS = [
+    "[$([!#6;+0]);!$([F,Cl,Br,I]);!$([o,s,nX3]);!$([Nv5,Pv5,Sv4,Sv6])]"
+]
+SALT_ANION_SMARTS = ["[O;$([OH0-,OH][CX3](=[OX1])),$([OX1]=[CX3]([OH0-,OH]))]"]
+SALT_CATION_SMARTS = [
+        "[N;$([NX3H2,NX4H3+;!$(NC=[!#6]);!$(NC#[!#6])][#6])]", 
+        "[#7;$([NH2X3][CH0X3](=[NH2X3+,NHX2+0])[NHX3]),$([NH2X3+,NHX2+0]=[CH0X3]([NH2X3])[NHX3])]",
+        "[#7;$([$([#7X3H+,#7X2H0+0]:[#6X3H]:[#7X3H]),$([#7X3H])]1:[#6X3H]:[$([#7X3H+,#7X2H0+0]:[#6X3H]:[#7X3H]),$([#7X3H])]:[#6X3H]:[#6X3]1),$([$([#7X3H+,#7X2H0+0]:[#6X3H]:[#7X3H]),$([#7X3H])]1:[#6X3H]:[$([#7X3H+,#7X2H0+0]:[#6X3H]:[#7X3H]),$([#7X3H])]:[#6X3]:[#6X3H]1)]"
+]
 DEGREES = [0, 1, 2, 3, 4]
 HYBRIDIZATIONS = [
     Chem.rdchem.HybridizationType.S,
@@ -146,10 +158,6 @@ def calc_free_sasa(mol):
     sasa = rdFreeSASA.CalcSASA(mol_h, radii)
     return sasa
 
-def calc_bound_sasa(ligand_mol, pocket_mol):
-    # TODO
-    pass
-
 
 class PDBbindDataProcessor():
 
@@ -221,6 +229,8 @@ class PDBbindDataProcessor():
             return False
         if not len(pocket_mol.GetConformers()) == 1:
             #print("None or more than one ligand conformer")
+            return False
+        if not pocket_mol.GetNumAtoms() <= 3000: # TODO
             return False
         return True
 
@@ -410,7 +420,6 @@ class PDBbindDataProcessor():
     def _get_complex_interaction_info(
             self,
             complex_fn, 
-            get_ligand_idx=False
             ):
         my_mol = PDBComplex()
         my_mol.load_pdb(complex_fn)
@@ -421,82 +430,161 @@ class PDBbindDataProcessor():
         my_mol.analyze()
         my_interactions = my_mol.interaction_sets[ligs[0]]
 
-        saltbridges = my_interactions.saltbridge_lneg + my_interactions.saltbridge_pneg
-        hbonds = my_interactions.hbonds_ldon + my_interactions.hbonds_pdon
-        hydrophobics = my_interactions.hydrophobic_contacts
-        pipistacks = my_interactions.pistacking
+        anions = my_interactions.saltbridge_pneg
+        cations = my_interactions.saltbridge_lneg
+        hbds = my_interactions.hbonds_pdon
+        hbas = my_interactions.hbonds_ldon
+        hydros = my_interactions.hydrophobic_contacts
+        pipis = my_interactions.pistacking
 
         # 1. salt-bridges
-        sb_l_indices = []
-        sb_p_indices = []
-        for sb in saltbridges:
-            if sb.protispos:
-                sb_l_indices += [x - 1 for x in sb.negative.atoms_orig_idx]
-                sb_p_indices += [x - 1 for x in sb.positive.atoms_orig_idx]
-            else:
-                sb_l_indices += [x - 1 for x in sb.positive.atoms_orig_idx]
-                sb_p_indices += [x - 1 for x in sb.negative.atoms_orig_idx]
+        anion_indices, cation_indices = [], []
+        for an in anions:
+            anion_indices +=  [x - 1 for x in an.negative.atoms_orig_idx]
+        for ct in cations:
+            cation_indices += [x - 1 for x in ct.positive.atoms_orig_idx]
 
         # 2. hydrogen bonds
-        hb_l_indices = []
-        hb_p_indices = []
-        for hbond in hbonds:
-            if hbond.protisdon:
-                hb_l_indices += [hbond.a_orig_idx - 1]
-                hb_p_indices += [hbond.d_orig_idx - 1]
-            else:
-                hb_l_indices += [hbond.d_orig_idx - 1]
-                hb_p_indices += [hbond.a_orig_idx - 1]
+        hbd_indices, hba_indices = [], []
+        for hbd in hbds:
+            hbd_indices += [hbd.d_orig_idx - 1]
+        for hba in hbas:
+            hba_indices += [hba.a_orig_idx - 1]
         
         # 3. Hydrophobic interactions
-        hp_l_indices = []
-        hp_p_indices = []
-        for hp in hydrophobics:
-            hp_l_indices += [hp.ligatom_orig_idx - 1]
-            hp_p_indices += [hp.bsatom_orig_idx - 1]
+        hyd_indices = []
+        for hyd in hydros:
+            hyd_indices += [hyd.bsatom_orig_idx - 1]
         
         # 4. Pi-Pi Stackings
-        pi_l_indices = []
-        pi_p_indices = []
-        for pi in pipistacks:
-            pi_l_indices += [x - 1 for x in pi.ligandring.atoms_orig_idx]
-            pi_p_indices += [x - 1 for x in pi.proteinring.atoms_orig_idx]
+        pipi_indices = []
+        for pi in pipis:
+            pipi_indices += [x - 1 for x in pi.proteinring.atoms_orig_idx]
 
-        sb_l_indices = list(set(sb_l_indices))
-        sb_p_indices = list(set(sb_p_indices))
-        hb_l_indices = list(set(hb_l_indices))
-        hb_p_indices = list(set(hb_p_indices))
-        hp_l_indices = list(set(hp_l_indices))
-        hp_p_indices = list(set(hp_p_indices))
-        pi_l_indices = list(set(pi_l_indices))
-        pi_p_indices = list(set(pi_p_indices))
+        anion_indices = list(set(anion_indices))
+        cation_indices = list(set(cation_indices))
+        hbd_indices = list(set(hbd_indices))
+        hba_indices = list(set(hba_indices))
+        hyd_indices = list(set(hyd_indices))
+        pipi_indices = list(set(pipi_indices))
 
-        if get_ligand_idx:
-            return sb_p_indices, hb_p_indices, hp_p_indices, pi_p_indices, \
-                   sb_l_indices, hb_l_indices, hp_l_indices, pi_l_indices
-        return sb_p_indices, hb_p_indices, hp_p_indices, pi_p_indices
+        return anion_indices, cation_indices, hbd_indices, hba_indices, \
+                hyd_indices, pipi_indices, None
+
+    def _get_complex_interaction_info_with_heuristics(
+            self,
+            ligand_mol,
+            pocket_mol,
+            dist_cutoff=4.
+            ):
+        def get_hydrophobic_atom_indices(mol) -> np.ndarray:
+            hydro_indice = []
+            natoms = mol.GetNumAtoms()
+            for atom_idx in range(natoms):
+                atom = mol.GetAtomWithIdx(atom_idx)
+                symbol = atom.GetSymbol()
+                if symbol.upper() in HYDROPHOBICS:
+                    hydro_indice += [atom_idx]
+                elif symbol.upper() in ["C"]:
+                    neighbors = [x.GetSymbol() for x in atom.GetNeighbors()]
+                    neighbors_wo_c = list(set(neighbors) - set(["C"]))
+                    if len(neighbors_wo_c) == 0:
+                        hydro_indice += [atom_idx]
+            hydro_indice = np.array(hydro_indice)
+            return hydro_indice
+
+        def get_aromatic_atom_indices(mol) -> np.ndarray:
+            aromatic_indice = []
+            natoms = mol.GetNumAtoms()
+            for atom_idx in range(natoms):
+                atom = mol.GetAtomWithIdx(atom_idx)
+                if atom.GetIsAromatic():
+                    aromatic_indice += [atom_idx]
+            aromatic_indice = np.array(aromatic_indice)
+            return aromatic_indice
+    
+        def get_hbd_atom_indices(mol, smarts_list=HBOND_DONOR_SMARTS) -> np.ndarray:
+            hbd_indice = []
+            for smarts in smarts_list:
+                smarts = Chem.MolFromSmarts(smarts)
+                hbd_indice += [idx[0] for idx in mol.GetSubstructMatches(smarts)]
+            hbd_indice = np.array(hbd_indice)
+            return hbd_indice
+        
+        def get_hba_atom_indices(mol, smarts_list=HBOND_ACCEPTOR_SMARTS) -> np.ndarray:
+            hba_indice = []
+            for smarts in smarts_list:
+                smarts = Chem.MolFromSmarts(smarts)
+                hba_indice += [idx[0] for idx in mol.GetSubstructMatches(smarts)]
+            hba_indice = np.array(hba_indice)
+            return hba_indice
+    
+        def get_anion_atom_indices(mol, smarts_list=SALT_ANION_SMARTS) -> np.ndarray:
+            anion_indice = []
+            for smarts in smarts_list:
+                smarts = Chem.MolFromSmarts(smarts)
+                for indices in mol.GetSubstructMatches(smarts):
+                    for idx in indices:
+                        atom = mol.GetAtomWithIdx(idx)
+                        if atom.GetSymbol().upper() != "C":
+                            anion_indice += [idx]
+            anion_indice = np.array(anion_indice)
+            return anion_indice
+        
+        def get_cation_atom_indices(mol, smarts_list=SALT_ANION_SMARTS) -> np.ndarray:
+            cation_indice = []
+            for smarts in smarts_list:
+                smarts = Chem.MolFromSmarts(smarts)
+                for indices in mol.GetSubstructMatches(smarts):
+                    for idx in indices:
+                        atom = mol.GetAtomWithIdx(idx)
+                        if atom.GetSymbol().upper() != "C":
+                            cation_indice += [idx]
+            cation_indice = np.array(cation_indice)
+            return cation_indice
+
+        lig_pos = ligand_mol.GetConformer(0).GetPositions()
+        poc_pos = pocket_mol.GetConformer(0).GetPositions()
+        dm = distance_matrix(lig_pos, poc_pos)
+        dm_min = np.min(dm, axis=0)
+        mask = np.where(dm_min<dist_cutoff, 1., 0.)
+        
+        anion_indice = get_anion_atom_indices(pocket_mol)
+        cation_indice = get_cation_atom_indices(pocket_mol)
+        hbd_indice = get_hbd_atom_indices(pocket_mol)
+        hba_indice = get_hba_atom_indices(pocket_mol)
+        hydro_indice = get_hydrophobic_atom_indices(pocket_mol)
+        aromatic_indice = get_aromatic_atom_indices(pocket_mol)
+        return anion_indice, cation_indice, hbd_indice, hba_indice, \
+                hydro_indice, aromatic_indice, mask
 
     def _get_pocket_interaction_matrix(
             self,
             ligand_n,
             pocket_n,
-            indices,
+            info
             ):
-        salt, hbond, hydro, pipi = indices[:4]
+        anion, cation, hbd, hba, hydro, pipi, mask = info
         pocket_intr_vectors = []
         for i in range(pocket_n):
             if i + ligand_n in pipi:
                 vec = self._get_one_hot_vector("pipi", INTERACTION_TYPES)
-            elif i + ligand_n in salt:
-                vec = self._get_one_hot_vector("salt", INTERACTION_TYPES)
-            elif i + ligand_n in hbond:
-                vec = self._get_one_hot_vector("hbond", INTERACTION_TYPES)
+            elif i + ligand_n in anion:
+                vec = self._get_one_hot_vector("anion", INTERACTION_TYPES)
+            elif i + ligand_n in cation:
+                vec = self._get_one_hot_vector("cation", INTERACTION_TYPES)
+            elif i + ligand_n in hbd:
+                vec = self._get_one_hot_vector("hbd", INTERACTION_TYPES)
+            elif i + ligand_n in hba:
+                vec = self._get_one_hot_vector("hba", INTERACTION_TYPES)
             elif i + ligand_n in hydro:
                 vec = self._get_one_hot_vector("hydro", INTERACTION_TYPES)
             else:
                 vec = self._get_one_hot_vector("none", INTERACTION_TYPES)
             pocket_intr_vectors.append(vec)
         pocket_intr_mat = np.stack(pocket_intr_vectors, axis=0)
+        if mask is not None:
+            pocket_intr_mat = pocket_intr_mat * mask.reshape(-1, 1)
         return pocket_intr_mat
 
     def _unlink_files(self, *files):
@@ -539,10 +627,10 @@ class PDBbindDataProcessor():
 
         ligand_n, pocket_n, complex_n = \
             ligand_mol.GetNumAtoms(), pocket_mol.GetNumAtoms(), complex_mol.GetNumAtoms()
-        interaction_info = self._get_complex_interaction_info(complex_fn, False)
+        interaction_info = self._get_complex_interaction_info(complex_fn)
         pocket_cond = self._get_pocket_interaction_matrix(ligand_n, pocket_n, interaction_info)
 
-        #self._unlink_files(pocket_fn_2, complex_fn)
+        self._unlink_files(pocket_fn_2, complex_fn)
             
         # Get conformer of each molecule
         ligand_coord = ligand_mol.GetConformer(0).GetPositions()
@@ -678,7 +766,6 @@ if __name__ == "__main__":
     processor = PDBbindDataProcessor(DATA_DIR, SAVE_DIR, use_whole_protein=False)
     idx = processor.keys.index("1dis")
 
-    """
     ligand_fn = processor.ligand_data_fns[idx]
     pocket_fn = processor.pocket_data_fns[idx]
 
@@ -694,13 +781,22 @@ if __name__ == "__main__":
 
     ligand_n, pocket_n, complex_n = \
         ligand_mol.GetNumAtoms(), pocket_mol.GetNumAtoms(), complex_mol.GetNumAtoms()
-    interaction_info = processor._get_complex_interaction_info(complex_fn, False)
+    interaction_info = processor._get_complex_interaction_info(complex_fn)
     pocket_cond = processor._get_pocket_interaction_matrix(ligand_n, pocket_n, interaction_info)
     pocket_cond = torch.Tensor(pocket_cond)
 
     print(interaction_info)
     print(pocket_cond.shape)
     print(torch.nonzero(pocket_cond[:, :-1]))
-    """
+    
+    interaction_info = processor._get_complex_interaction_info_with_heuristics(ligand_mol, pocket_mol)
+    pocket_cond = processor._get_pocket_interaction_matrix(ligand_n, pocket_n, interaction_info)
+    pocket_cond = torch.Tensor(pocket_cond)
+
+    print(interaction_info)
+    print(pocket_cond.shape)
+    print(torch.nonzero(pocket_cond[:, :-1]))
+
+    exit()
 
     processor.run(idx)

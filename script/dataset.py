@@ -155,8 +155,8 @@ class DataProcessor(object):
                     continue
             
                 # Select next node from neighboring nodes
-                # next = torch.nonzero(adj[cur] > 0)[0][0] 
-                next = torch.multinomial(adj[cur], 1)[0] # select randomly from the neighboring nodes
+                next = torch.nonzero(adj[cur] > 0)[0][0] 
+                # next = torch.multinomial(adj[cur], 1)[0] # select randomly from the neighboring nodes
 
             # Get true type and coordinate
             next_Z = l_dict["l_Z"][next:next+1] 

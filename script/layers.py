@@ -243,7 +243,7 @@ class ConstrainedCrossAttention(nn.Module):
         attn_logits = attn_logits.masked_fill(mask==0, -9e15)
         attention = F.softmax(attn_logits, dim=-1)
         values = torch.matmul(attention, v) * g + h
-        return values
+        return values, attention
 
     def forward(
             self,

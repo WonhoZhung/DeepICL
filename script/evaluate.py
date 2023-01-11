@@ -140,11 +140,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--result_dir", help="result_dir", type=str, \
-            default="results/exp_0_2")
+            default="results/exp_5_9")
     parser.add_argument("--key_dir", help="key_dir", type=str, \
-            default="../data/generate_keys/test_keys.pkl")
+            default="../data/generate_keys_3/test_keys.pkl")
     parser.add_argument("--smi_dir", help="smi_dir", type=str, \
-            default="../../gschnet/DeepSLIP/data/keys/train_smiles.txt")
+            default="../data/keys/train_smiles.txt")
     parser.add_argument("--filter_level", help="filter_level", type=int, \
             default=0)
 
@@ -157,7 +157,6 @@ if __name__ == "__main__":
             KEYS = pickle.load(f)
         KEYS = sorted(KEYS)
 
-    #KEYS = ["1dis"]
 
     with open(args.smi_dir, 'r') as f: 
         SMIS = [Chem.CanonSmiles(s.strip().split()[-1]) for s in f.readlines()]

@@ -258,6 +258,11 @@ def main_worker(gpu, ngpus_per_node, args):
                 lr = param_group["lr"]
                 if lr > args.lr_min:
                     param_group["lr"] = lr * args.lr_decay
+
+        ### TODO
+        if lr_tick > 20:
+            print("No longer model is learning: training stop")
+            exit()
         
         if rank == 0:
             print(f"{epoch} || " + \

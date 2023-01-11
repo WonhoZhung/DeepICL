@@ -5,6 +5,7 @@ from torch_geometric.nn import radius_graph
 
 import rdkit
 from rdkit import Chem
+from rdkit.Chem import AllChem, rdDetermineBonds
 from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*')
 
@@ -81,11 +82,44 @@ class Generator(DataProcessor):
             self
             ):
         return len(self.keys)
-
+    
     def run(
             self,
             idxs
             ):
+
+        data_idx, sample_idx = idxs
+        
+        key = self.keys[data_idx]
+        name = f"{key}_{sample_idx}"
+        fn = f"{self.result_dir}/{name}.xyz"
+        fn2 = f"{self.result_dir}/{name}.sdf"
+        
+        if self.verbose:
+            print(f"Generating sample: {name}...", flush=True)
+
+        input = self._get_input_from_data(self.data_list[data_idx])
+        output = self._generate_molecule(*input)
+        msg = f"{name}"
+        utils.write_xyz(output[0], output[1], msg=msg, fn=fn, is_onehot=True)
+        try:
+            mol = AllChem.MolFromXYZFile(fn)
+            rdDetermineBonds.DetermineBonds(mol, charge=0)
+        except:
+            return
+        writer = Chem.SDWriter(fn2)
+        writer.write(mol)
+        writer.close()
+        os.unlink(fn)
+        return
+
+    def _run(
+            self,
+            idxs
+            ):
+
+        ########### DEPRECATED ###########
+        #### DELETED IN LATER VERSION ####
 
         data_idx, sample_idx = idxs
         
@@ -192,13 +226,15 @@ class Generator(DataProcessor):
         r"""
         """
 
-        latent = torch.randn((1, self.args.num_hidden_feature), \
+        latent = torch.randn((1, self.args.num_latent_feature), \
                 device=self.device)
 
-        if self.args.conditional:
+        if not self.args.conditional:
+            p_cond = None
+        elif self.args.use_condition:
             p_cond = p_dict["p_cond"]
-        else:
-            # No interaction conditioning
+        else: # conditional=True but use_condition=False
+            # Blank conditioning
             blank = torch.eye(utils.NUM_INTERACTION_TYPES)[-1].unsqueeze(0)
             p_cond = blank.repeat(p_dict["p_n"], 1)
         
@@ -244,7 +280,10 @@ class Generator(DataProcessor):
             p_Z_in = p_dict["p_Z"][p_ind] 
             p_R_in = p_dict["p_R"][p_ind]
             p_to_f_dist = torch.mean(torch.cdist(f_R, p_R_in))
-            p_c = p_cond[p_ind]
+            if self.args.conditional:
+                p_c = p_cond[p_ind]
+            else:
+                p_c = None
 
 
             # Make PyG HeteroData
@@ -287,11 +326,13 @@ class Generator(DataProcessor):
             # Embed(propagate) unfinished graph
             self.model.embedding(data, cond=p_c)
             self._pocket_coeff_scheduler(p_to_f_dist)
-            
-            #data["ligand"].h = self.model.latent(torch.cat([data["ligand"].h, \
-            #        latent.repeat(data["ligand"].h.shape[0], 1)], -1))
-            data["pocket"].h = self.model.latent(torch.cat([data["pocket"].h, \
-                    latent.repeat(data["pocket"].h.shape[0], 1)], -1))
+
+            if self.args.conditional:
+                data["pocket"].h = self.model.latent_mlp(torch.cat([data["pocket"].h, \
+                        p_c, latent.repeat(data["pocket"].h.shape[0], 1)], -1))
+            else:
+                data["pocket"].h = self.model.latent_mlp(torch.cat([data["pocket"].h, \
+                        latent.repeat(data["pocket"].h.shape[0], 1)], -1))
 
             next_type_ll_log_prob = self.ligand_coeff * \
                     self.model.next_type_ll(data, "ligand").squeeze(0)
@@ -422,9 +463,10 @@ def main():
     # 0. Argument setting
     args = generate_args_parser()
     d = vars(args)
+    lines = [f"{a} = {d[a]}\n" for a in d]
     if args.verbose:
         print("####################################################")
-        for a in d: print(a, "=", d[a])
+        for line in lines: print(line, end="")
         print("####################################################")
 
     # 1. Device setting
@@ -462,12 +504,14 @@ def main():
                 exit()
     if args.verbose:
         print("Saving results in:", args.result_dir)
+    with open(f"{args.result_dir}/generation_params.log", 'w') as w:
+        w.writelines(lines)
 
     # 4. Generation
     if args.ncpu > 1:
         st = time.time()
         pool = multiprocessing.Pool(args.ncpu)
-        r = pool.map_async(generator.run, generator.input_list)
+        r = pool.map_async(generator._run, generator.input_list)
         r.wait()
         pool.close()
         pool.join()
@@ -475,10 +519,10 @@ def main():
             delta_t = time.time() - st
             N = args.num_sample * len(generator.keys)
             print(f"Duration: {delta_t:.2f} (s)")
-            print(f"Sampling speed: {delta_t / N:.2f} (s/sampling)")
+            print(f"Sampling speed: {delta_t / N:.2f} (s/sample)")
     else:
         for x in generator.input_list:
-            generator.run(x)
+            generator._run(x)
 
 
 if __name__ == "__main__":

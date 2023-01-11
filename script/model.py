@@ -23,17 +23,18 @@ class DeepSLIP(nn.Module):
         self.vae = VariationalEncoder(args)
 
         if args.conditional:
+            self.conditional = True
             self.num_cond_feature = args.num_cond_feature
         else:
+            self.conditional = False
             self.num_cond_feature = 0
 
         if args.ssl:
             self.ssl_model = SSLModel(args)
 
-        self.latent = nn.Linear(
-                args.num_hidden_feature * 2,
+        self.latent_mlp = nn.Linear(
+                args.num_hidden_feature + args.num_latent_feature + self.num_cond_feature,
                 args.num_hidden_feature, 
-                bias=False
         )
 
         self.next_type_ll = NextType(args, self.embedding.l_node_emb)
@@ -71,10 +72,13 @@ class DeepSLIP(nn.Module):
         self.embedding(traj, cond=traj_cond)
         
         # Concat latent vector with atom features
-        #traj["ligand"].h = self.latent(torch.cat([traj["ligand"].h, \
-        #        latent.repeat(traj["ligand"].h.shape[0], 1)], -1))
-        traj["pocket"].h = self.latent(torch.cat([traj["pocket"].h, \
-                latent.repeat(traj["pocket"].h.shape[0], 1)], -1))
+        if self.conditional:
+            traj["pocket"].h = self.latent_mlp(torch.cat([traj["pocket"].h, \
+                    traj_cond, latent.repeat(traj["pocket"].h.shape[0], 1)], -1))
+        else:
+            traj["pocket"].h = self.latent_mlp(torch.cat([traj["pocket"].h, \
+                    latent.repeat(traj["pocket"].h.shape[0], 1)], -1))
+
 
         # Predict p(Type|L) & p(Type|P)
         type_ll_pred = self.next_type_ll(traj, "ligand")
@@ -284,7 +288,7 @@ class NextDist(nn.Module):
         type_embed = self.embedding(next_type)[batch] # [N, num_hidden]
         dist_embed = data[key].h * type_embed
         if self.use_attention:
-            dist_embed = self.attn(dist_embed, data[key].pos, batch)
+            dist_embed, attn = self.attn(dist_embed, data[key].pos, batch)
         next_dist = F.log_softmax(self.dense(dist_embed), dim=-1)
         return next_dist
 
@@ -301,17 +305,17 @@ class VariationalEncoder(nn.Module):
 
         self.args = args
         
-        self.mean = nn.Linear(args.num_hidden_feature, args.num_hidden_feature)
-        self.logvar = nn.Linear(args.num_hidden_feature, args.num_hidden_feature)
+        self.mean = nn.Linear(args.num_hidden_feature, args.num_latent_feature)
+        self.logvar = nn.Linear(args.num_hidden_feature, args.num_latent_feature)
 
     def reparameterize(
             self,
             mean,
             logvar
             ):
-        std = torch.exp(0.5*logvar)
+        std = torch.exp(0.5 * logvar)
         eps = torch.randn(std.shape, device=std.device)
-        return eps*std + mean
+        return eps * std + mean
 
     def vae_loss(
             self,
@@ -325,11 +329,13 @@ class VariationalEncoder(nn.Module):
             data,
             ):
 
-        h_cat = torch.cat([data["ligand"].h, data["pocket"].h], 0)
-        readout = h_cat.mean(dim=0, keepdim=True)
+        h_cat = torch.cat([data["ligand"].h, data["pocket"].h], 0) # [L+P F]
+        readout = h_cat.mean(dim=0, keepdim=True) # [1 F]
         mean = self.mean(readout)
         logvar = self.logvar(readout)
-        latent = self.reparameterize(mean, logvar)
+        latent = self.reparameterize(mean, logvar) # [1 F']
+        #l_latent, p_latent = latent[:data["ligand"].h.shape[0]], \
+        #        latent[data["ligand"].h.shape[0]:]
         vae_loss = self.vae_loss(mean, logvar)
         return latent, vae_loss
 

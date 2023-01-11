@@ -33,6 +33,8 @@ def train_args_parser():
             type=int, default=utils.NUM_POCKET_ATOM_TYPES)
     parser.add_argument("--num_hidden_feature", help="num hidden features", \
             type=int)
+    parser.add_argument("--num_latent_feature", help="num latent features", \
+            type=int)
     parser.add_argument("--gamma1", type=float, default=1e1)
     parser.add_argument("--gamma2", type=float, default=5e1)
     parser.add_argument("--dist_one_hot_param1", help="dist. one-hot param for representation", \
@@ -85,7 +87,9 @@ def generate_args_parser():
             type=int, default=utils.NUM_LIGAND_ATOM_TYPES)
     parser.add_argument("--num_pocket_atom_feature", help="pocket atom features", \
             type=int, default=utils.NUM_POCKET_ATOM_TYPES)
-    parser.add_argument("--num_hidden_feature", help="node hidden features", \
+    parser.add_argument("--num_hidden_feature", help="num hidden features", \
+            type=int)
+    parser.add_argument("--num_latent_feature", help="num latent features", \
             type=int)
     parser.add_argument("--gamma1", type=float, default=1e1)
     parser.add_argument("--gamma2", type=float, default=5e1)
@@ -95,6 +99,7 @@ def generate_args_parser():
             type=int, nargs="+", default=[0, 10, 200])
     parser.add_argument("--use_scaffold", help="use_scaffold", action="store_true")
     parser.add_argument("--conditional", help="conditional", action="store_true")
+    parser.add_argument("--use_condition", help="use condition", action="store_true")
     parser.add_argument("--num_cond_feature", help="num condition features", \
             type=int, default=utils.NUM_INTERACTION_TYPES)
     parser.add_argument("--ssl", help="semi-supervised learning", action="store_true")
@@ -105,9 +110,9 @@ def generate_args_parser():
     parser.add_argument("--radial_limits", type=float, nargs='+', default=[0.9, 2.2])
     parser.add_argument("--num_sample", help="num samples", type=int, default=30)
     parser.add_argument("--add_noise", help="add noise", action="store_true")
-    parser.add_argument("--pocket_coeff_max", type=float, default=100.0)
-    parser.add_argument("--pocket_coeff_thr", type=float, default=3.0)
-    parser.add_argument("--pocket_coeff_beta", type=float, default=0.44)
+    parser.add_argument("--pocket_coeff_max", type=float, default=1.0)
+    parser.add_argument("--pocket_coeff_thr", type=float, default=2.5)
+    parser.add_argument("--pocket_coeff_beta", type=float, default=0.0)
     parser.add_argument("--dropout", help="dropout parameter", type=float, \
             default=0.0)
     parser.add_argument("--temperature_factor1", type=float, default=0.0)

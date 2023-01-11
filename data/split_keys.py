@@ -13,20 +13,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--pdbbind_data_dir", type=str, \
         default="/home/wonho/work/data/PDBbind_v2020/total-set/")
 parser.add_argument("--processed_data_dir", type=str, \
-        default=f"/home/wonho/work/DL/gschnet/DeepSLIP/data/data/")
+        default=f"/home/wonho/work/DL/DeepICL/data/data/")
 parser.add_argument("--key_dir", type=str, \
-        default=f"/home/wonho/work/DL/gschnet/DeepSLIP/data/keys/")
+        default=f"/home/wonho/work/DL/DeepICL/data/keys/")
 parser.add_argument("--fasta_filename", type=str, \
-        default=f"pdbbind_v2020_general_set_processed.fa")
+        default=f"./split_info/pdbbind_v2020_general_set_processed.fa")
 parser.add_argument("--cluster_filename", type=str, \
-        default="cluster_output")
-parser.add_argument("--affinity_dict_filename", type=str, \
-        default="./pdbbind_v2020_total_calc_affinity_dict.pkl")
+        default="./split_info/cluster_output")
 parser.add_argument("--cutoff", type=float, default=0.6)
 parser.add_argument("--num_iter", type=int, default=3)
 parser.add_argument("--train_ratio", type=float, default=0.8)
-parser.add_argument("--test_ratio", type=float, default=0.1)
-parser.add_argument("--valid_ratio", type=float, default=0.1)
+parser.add_argument("--test_ratio", type=float, default=0.05)
+parser.add_argument("--valid_ratio", type=float, default=0.15)
 args = parser.parse_args()
 print(args)
 
@@ -67,13 +65,6 @@ clusters = list(cluster_dict.values())
 clusters = sorted(clusters, key=lambda x: len(x), reverse=True)
 num_data = sum([len(cls) for cls in clusters])
 
-###
-#with open(args.affinity_dict_filename, 'rb') as f:
-#    aff_dict = pickle.load(f)
-#ligand_key = set(aff_dict["ligand"].keys())
-#scaff_key = set(aff_dict["scaff"].keys())
-#calc_keys = list(ligand_key & scaff_key)    
-###
 
 train_keys, test_keys, valid_keys = [], [], []
 while len(train_keys) < num_data * args.train_ratio and len(clusters) > 0:
@@ -85,16 +76,6 @@ while len(test_keys) < num_data * args.test_ratio and len(clusters) > 0:
 for clstr in clusters:
     valid_keys += list(clstr)
 
-print("\n####################################################################\n")
-print("BEFORE FILTERING...")
-print(f"# Train data : {len(train_keys)}")
-print(f"# Test data : {len(test_keys)}")
-print(f"# Validation data : {len(valid_keys)}")
-print(f"# Total: {len(train_keys) + len(valid_keys) + len(test_keys)}")
-
-#train_keys = list(filter(lambda x: x in calc_keys, train_keys))
-#test_keys = list(filter(lambda x: x in calc_keys, test_keys))
-#valid_keys = list(filter(lambda x: x in calc_keys, valid_keys))
 
 if not os.path.exists(args.key_dir):
     os.mkdir(args.key_dir)
@@ -103,7 +84,6 @@ with open(f"{args.key_dir}/test_keys.pkl", 'wb') as w: pickle.dump(test_keys, w)
 with open(f"{args.key_dir}/valid_keys.pkl", 'wb') as w: pickle.dump(valid_keys, w)
 
 print("\n####################################################################\n")
-print("AFTER FILTERING...")
 print(f"# Train data : {len(train_keys)}")
 print(f"# Test data : {len(test_keys)}")
 print(f"# Validation data : {len(valid_keys)}")
@@ -114,7 +94,7 @@ for key in train_keys:
 
     with open(args.processed_data_dir+"/"+key, 'rb') as f:
         data = pickle.load(f)
-    smi = data[-2]
+    smi = data[-3]
     smiles.append(key + '\t' + smi + '\n')
 
 with open(args.key_dir+"/train_smiles.txt", 'w') as w: 
@@ -125,7 +105,7 @@ for key in test_keys:
 
     with open(args.processed_data_dir+"/"+key, 'rb') as f:
         data = pickle.load(f)
-    smi = data[-2]
+    smi = data[-3]
     smiles.append(key + '\t' + smi + '\n')
 
 with open(args.key_dir+"/test_smiles.txt", 'w') as w: 
@@ -136,7 +116,7 @@ for key in valid_keys:
 
     with open(args.processed_data_dir+"/"+key, 'rb') as f:
         data = pickle.load(f)
-    smi = data[-2]
+    smi = data[-3]
     smiles.append(key + '\t' + smi + '\n')
 
 with open(args.key_dir+"/valid_smiles.txt", 'w') as w: 

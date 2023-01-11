@@ -17,7 +17,7 @@ if len(os.listdir(save_dir)) > 0:
     if token == "y":
         os.system(f"rm {save_dir}/*")
         time.sleep(5.0)
-        print(len(os.listdir(save_dir)))
+        #print(len(os.listdir(save_dir)))
     elif token == "n":
         pass
     else:

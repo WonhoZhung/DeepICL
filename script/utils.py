@@ -14,9 +14,11 @@ ATOM_TYPES = ['C', 'N', 'O', 'F', 'P', 'S', 'Cl', 'Br']
 ATOM_NUM = [6, 7, 8, 9, 15, 16, 17, 35]
 ATOM_MASS = [12., 14., 16., 19., 31., 32.1, 35.5, 79.9]
 
+INTERACTION_TYPES = ["pipi", "anion", "cation", "hbd", "hba", "hydro"]
+
 NUM_LIGAND_ATOM_TYPES = len(ATOM_TYPES) + 1
 NUM_POCKET_ATOM_TYPES = 51
-NUM_INTERACTION_TYPES = 5
+NUM_INTERACTION_TYPES = len(INTERACTION_TYPES) + 1
 
 PERIODIC_TABLE = """                                                       
 H,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,HE
