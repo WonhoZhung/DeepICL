@@ -706,3 +706,6 @@
 2rc9	[NH3+]C1(C(=O)O)CC1
 2rc8	[NH3+][C@H](CO)C(=O)O
 2rcb	[NH3+][C@H](CO)C(=O)O
+1dis	COc1cc(Cc2cnc(N)nc2N)cc(OCCC[C@@H](CCC(=O)O)C(=O)O)c1Br
+1bzf	COc1cc(NCc2ccc3nc(N)nc(N)c3c2C)cc(OC)c1OC
+1ao8	CN(Cc1cnc2[nH]c(=N)[nH]c(=N)c2n1)c1ccc(C(=O)N[C@@H](CCC(=O)O)C(=O)O)cc1

@@ -1,78 +1,57 @@
+from math import pi as PI
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Linear
-from torch_scatter import scatter_mean, scatter_softmax, scatter_add
-from torch_geometric.nn import MessagePassing
 from torch_geometric.data import HeteroData
+from torch_geometric.nn import MessagePassing
+from torch_scatter import scatter_add, scatter_mean, scatter_softmax
 
-import numpy as np
-from math import pi as PI
 
-
-class IAGMN_Layer(nn.Module): # Invariant Attention Graph Matching Network
-
-    def __init__(
-            self,
-            args
-            ):
+class IAGMN_Layer(nn.Module):  # Invariant Attention Graph Matching Network
+    def __init__(self, args):
         super().__init__()
-        
+
         self.args = args
         self.hidden_feature = args.num_hidden_feature
         if args.conditional:
             self.cond_feature = args.num_cond_feature
             self.cond_mlp = nn.Linear(
-                    self.hidden_feature + self.cond_feature,
-                    self.hidden_feature, 
-                    bias=False
+                self.hidden_feature + self.cond_feature, self.hidden_feature, bias=False
             )
         else:
             self.cond_feature = 0
-        
-        self.inter_mlp = \
-                nn.Sequential(
-                        nn.Linear(self.args.dist_one_hot_param1[-1] + \
-                                self.hidden_feature * 2, self.hidden_feature),
-                        nn.SiLU(),
-                        nn.Linear(self.hidden_feature, self.hidden_feature),
-                )
 
-        self.intra_mlp = \
-                nn.Sequential(
-                        nn.Linear(self.args.dist_one_hot_param1[-1] + \
-                                self.hidden_feature * 2, self.hidden_feature),
-                        nn.SiLU(),
-                        nn.Linear(self.hidden_feature, self.hidden_feature),
-                )
-        
-        self.inter_intra_gate = \
-                nn.Sequential(
-                        nn.Linear(2 * self.hidden_feature, 1),
-                        nn.Sigmoid()
-                )
-        
-        self.l_node_update = \
-                nn.GRUCell(
-                        self.hidden_feature,
-                        self.hidden_feature
-                )
-        self.p_node_update = \
-                nn.GRUCell(
-                        self.hidden_feature,
-                        self.hidden_feature
-                )
+        self.inter_mlp = nn.Sequential(
+            nn.Linear(
+                self.args.dist_one_hot_param1[-1] + self.hidden_feature * 2,
+                self.hidden_feature,
+            ),
+            nn.SiLU(),
+            nn.Linear(self.hidden_feature, self.hidden_feature),
+        )
+
+        self.intra_mlp = nn.Sequential(
+            nn.Linear(
+                self.args.dist_one_hot_param1[-1] + self.hidden_feature * 2,
+                self.hidden_feature,
+            ),
+            nn.SiLU(),
+            nn.Linear(self.hidden_feature, self.hidden_feature),
+        )
+
+        self.inter_intra_gate = nn.Sequential(
+            nn.Linear(2 * self.hidden_feature, 1), nn.Sigmoid()
+        )
+
+        self.l_node_update = nn.GRUCell(self.hidden_feature, self.hidden_feature)
+        self.p_node_update = nn.GRUCell(self.hidden_feature, self.hidden_feature)
 
         self.radial_cutoff = args.dist_one_hot_param1[1]
 
-
-    def compute_cross_attn(
-            self,
-            query,
-            key,
-            value,
-            batch_index
-            ):
+    def compute_cross_attn(self, query, key, value, batch_index):
         attn = torch.mm(query, torch.transpose(key, 1, 0))
         if batch_index is None:
             attn_softmax = F.softmax(attn, -1)
@@ -81,26 +60,18 @@ class IAGMN_Layer(nn.Module): # Invariant Attention Graph Matching Network
         cross_attn = torch.mm(attn_softmax, value)
         return cross_attn
 
-    def filter_function(
-            self,
-            edge_weight
-            ):
-        return 0.5 * (torch.cos(edge_weight * PI / self.radial_cutoff) + 1.)
+    def filter_function(self, edge_weight):
+        return 0.5 * (torch.cos(edge_weight * PI / self.radial_cutoff) + 1.0)
 
-    def forward(
-            self,
-            data,
-            cond=None
-            ):
-
+    def forward(self, data, cond=None):
         if self.args.conditional:
             data["pocket"].h_cond = torch.cat([data["pocket"].h, cond], -1)
             data["pocket"].h = self.cond_mlp(data["pocket"].h_cond)
-        
+
         e_ll_src, e_ll_tar = data["l2l"].edge_index
         e_pp_src, e_pp_tar = data["p2p"].edge_index
         e_pl_src, e_pl_tar = data["p2l"].edge_index
-        
+
         h_ll_i, h_ll_j = data["ligand"].h[e_ll_src], data["ligand"].h[e_ll_tar]
         h_pp_i, h_pp_j = data["pocket"].h[e_pp_src], data["pocket"].h[e_pp_tar]
         h_pl_i, h_pl_j = data["pocket"].h[e_pl_src], data["ligand"].h[e_pl_tar]
@@ -116,19 +87,35 @@ class IAGMN_Layer(nn.Module): # Invariant Attention Graph Matching Network
         filter_pp = self.filter_function(data["p2p"].edge_weight).unsqueeze(-1)
         filter_pl = self.filter_function(data["p2l"].edge_weight).unsqueeze(-1)
 
-        msg_ll = self.inter_mlp(ll_in) * filter_ll # [B, num_ll_edge, num_hidden]
+        msg_ll = self.inter_mlp(ll_in) * filter_ll  # [B, num_ll_edge, num_hidden]
         msg_pp = self.inter_mlp(pp_in) * filter_pp
         msg_pl = self.intra_mlp(pl_in) * filter_pl
         msg_lp = self.intra_mlp(lp_in) * filter_pl
 
-        aggr_msg_ll = scatter_mean(msg_ll, e_ll_tar, dim=0, \
-                        out=data["ligand"].h.new_zeros(data["ligand"].h.shape))
-        aggr_msg_pp = scatter_mean(msg_pp, e_pp_tar, dim=0, \
-                        out=data["pocket"].h.new_zeros(data["pocket"].h.shape))
-        aggr_msg_pl = scatter_mean(msg_pl, e_pl_tar, dim=0, \
-                        out=data["ligand"].h.new_zeros(data["ligand"].h.shape))
-        aggr_msg_lp = scatter_mean(msg_lp, e_pl_src, dim=0, \
-                        out=data["pocket"].h.new_zeros(data["pocket"].h.shape))
+        aggr_msg_ll = scatter_mean(
+            msg_ll,
+            e_ll_tar,
+            dim=0,
+            out=data["ligand"].h.new_zeros(data["ligand"].h.shape),
+        )
+        aggr_msg_pp = scatter_mean(
+            msg_pp,
+            e_pp_tar,
+            dim=0,
+            out=data["pocket"].h.new_zeros(data["pocket"].h.shape),
+        )
+        aggr_msg_pl = scatter_mean(
+            msg_pl,
+            e_pl_tar,
+            dim=0,
+            out=data["ligand"].h.new_zeros(data["ligand"].h.shape),
+        )
+        aggr_msg_lp = scatter_mean(
+            msg_lp,
+            e_pl_src,
+            dim=0,
+            out=data["pocket"].h.new_zeros(data["pocket"].h.shape),
+        )
 
         l_msg_cat = torch.cat([aggr_msg_ll, aggr_msg_pl], -1)
         p_msg_cat = torch.cat([aggr_msg_pp, aggr_msg_lp], -1)
@@ -148,44 +135,36 @@ class IAGMN_Layer(nn.Module): # Invariant Attention Graph Matching Network
 
 
 class EGCL(nn.Module):
-
-    def __init__(
-            self,
-            args
-            ):
+    def __init__(self, args):
         super().__init__()
-        
+
         self.args = args
-        
-        self.distance_expand = SoftOneHot(*args.dist_one_hot_param1, \
-                gamma=args.gamma1)
+
+        self.distance_expand = SoftOneHot(*args.dist_one_hot_param1, gamma=args.gamma1)
         self.num_edge_feature = args.dist_one_hot_param1[-1]
         self.num_node_feature = args.num_pocket_atom_feature
         self.num_hidden_feature = args.num_hidden_feature
 
         self.edge_mlp = nn.Sequential(
-                nn.Linear(self.num_node_feature * 2 + self.num_edge_feature, \
-                        self.num_hidden_feature),
-                nn.SiLU(),
-                nn.Linear(self.num_hidden_feature, self.num_hidden_feature)
+            nn.Linear(
+                self.num_node_feature * 2 + self.num_edge_feature,
+                self.num_hidden_feature,
+            ),
+            nn.SiLU(),
+            nn.Linear(self.num_hidden_feature, self.num_hidden_feature),
         )
         self.node_mlp = nn.Sequential(
-                nn.Linear(self.num_hidden_feature, self.num_hidden_feature),
-                nn.SiLU(),
-                nn.Linear(self.num_hidden_feature, self.num_node_feature)
+            nn.Linear(self.num_hidden_feature, self.num_hidden_feature),
+            nn.SiLU(),
+            nn.Linear(self.num_hidden_feature, self.num_node_feature),
         )
         self.coord_mlp = nn.Sequential(
-                nn.Linear(self.num_hidden_feature, self.num_hidden_feature),
-                nn.SiLU(),
-                nn.Linear(self.num_hidden_feature, 1)
+            nn.Linear(self.num_hidden_feature, self.num_hidden_feature),
+            nn.SiLU(),
+            nn.Linear(self.num_hidden_feature, 1),
         )
 
-    def forward(
-            self,
-            h,
-            x,
-            edge_index
-            ):
+    def forward(self, h, x, edge_index):
         src, tar = edge_index
         h_i, h_j = h[src], h[tar]
         x_i, x_j = x[src], x[tar]
@@ -197,41 +176,38 @@ class EGCL(nn.Module):
         div = d_ij.unsqueeze(-1) + 1
 
         x_prime = x + scatter_add((x_i - x_j) * coord_msg / div, tar, dim=0)
-        h_prime = h + scatter_mean(self.node_mlp(edge_msg), tar, \
-                dim=0, out=h.new_zeros(h.shape))
+        h_prime = h + scatter_mean(
+            self.node_mlp(edge_msg), tar, dim=0, out=h.new_zeros(h.shape)
+        )
         return h_prime, x_prime
 
 
 class ConstrainedCrossAttention(nn.Module):
-
-    def __init__(
-            self,
-            args
-            ):
-        
+    def __init__(self, args):
         self.args = args
 
-        self.qkv_proj = nn.Linear(args.num_hidden_feature, \
-                3*args.num_hidden_feature) # q, k, v
+        self.qkv_proj = nn.Linear(
+            args.num_hidden_feature, 3 * args.num_hidden_feature
+        )  # q, k, v
         self.b_proj = nn.Linear(args.num_hidden_feature, 1)
         self.g_proj = nn.Linear(args.num_hidden_feature, 1)
         self.t_proj = nn.Linear(args.dist_one_hot_param1[-1], 1)
 
         self.dist_expand = SoftOneHot(*args.dist_one_hot_param1)
-    
-    def attention(
-            self,
-            h,
-            x,
-            batch,
-            length,
-            ):
 
-        sqrt_len = torch.pow(length, -0.5)[batch] # 1 / sqrt(c)
-        mask = torch.block_diag(*[torch.ones((c, c), device=h.device) for \
-                c in length.long()])
+    def attention(
+        self,
+        h,
+        x,
+        batch,
+        length,
+    ):
+        sqrt_len = torch.pow(length, -0.5)[batch]  # 1 / sqrt(c)
+        mask = torch.block_diag(
+            *[torch.ones((c, c), device=h.device) for c in length.long()]
+        )
         intra_dist = self.dist_expand(torch.cdist(x, x))
-        
+
         qkv_proj = self.qkv_proj(h)
         q, k, v = qkv_proj.chunk(3, dim=-1)
         t = self.t_proj(intra_dist).squeeze(-1)
@@ -240,17 +216,12 @@ class ConstrainedCrossAttention(nn.Module):
         attn_logits = torch.matmul(q, k.transpose(-2, -1)) * sqrt_len.unsqueeze(-1)
 
         attn_logits = attn_logits + b + t
-        attn_logits = attn_logits.masked_fill(mask==0, -9e15)
+        attn_logits = attn_logits.masked_fill(mask == 0, -9e15)
         attention = F.softmax(attn_logits, dim=-1)
         values = torch.matmul(attention, v) * g + h
         return values, attention
 
-    def forward(
-            self,
-            h,
-            x,
-            batch
-            ):
+    def forward(self, h, x, batch):
         ones = batch.new_ones(batch.shape)
         length = scatter_add(ones, batch, 0).long()
         return self.attention(h, batch, length, x)
@@ -258,7 +229,7 @@ class ConstrainedCrossAttention(nn.Module):
 
 class SoftOneHot(nn.Module):
     r"""
-    Gaussian expansion of given distance 
+    Gaussian expansion of given distance
 
     Args:
         x_min (float)
@@ -268,30 +239,24 @@ class SoftOneHot(nn.Module):
         normalize (bool)
     """
 
-    def __init__(
-            self,
-            x_min,
-            x_max,
-            steps,
-            gamma=10.0,
-            normalize=False
-            ):
+    def __init__(self, x_min, x_max, steps, gamma=10.0, normalize=False):
         super().__init__()
 
         assert x_min < x_max, "x_min is larger than x_max"
         self.x_min = x_min
         self.x_max = x_max
         self.steps = int(steps)
-        self.center = torch.Tensor([x_min * (steps - i - 1) / (steps - 1) + \
-                           x_max * i / (steps - 1) for i in range(steps)])
+        self.center = torch.Tensor(
+            [
+                x_min * (steps - i - 1) / (steps - 1) + x_max * i / (steps - 1)
+                for i in range(steps)
+            ]
+        )
 
         self.gamma = gamma
         self.normalize = normalize
 
-    def forward(
-            self,
-            x
-            ):
+    def forward(self, x):
         r"""
         Args:
             x (torch.Tensor): distance matrix with dimension [A B]
@@ -310,13 +275,12 @@ class SoftOneHot(nn.Module):
 
 
 class HardOneHot(nn.Module):
-
     def __init__(
-            self,
-            x_min,
-            x_max,
-            steps,
-            ):
+        self,
+        x_min,
+        x_max,
+        steps,
+    ):
         super().__init__()
         assert x_min < x_max, "x_min is larger than x_max"
         self.x_min = x_min
@@ -324,19 +288,15 @@ class HardOneHot(nn.Module):
         self.steps = int(steps)
         self.eye = torch.eye(self.steps)
 
-    def forward(
-            self,
-            x
-            ):
+    def forward(self, x):
         x = x - self.x_min
         x = x * (self.steps - 1) / (self.x_max - self.x_min)
         x = x.clamp(0, self.steps - 1).long()
-        c = self.eye[x] 
+        c = self.eye[x]
         return c
 
 
 if __name__ == "__main__":
-
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -347,4 +307,3 @@ if __name__ == "__main__":
     args.dist_one_hot_param1 = [0, 10, 20]
 
     layer = IAGMN_Layer(args)
-

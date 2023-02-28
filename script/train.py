@@ -1,28 +1,31 @@
 import os
-import time
 import sys
-import numpy as np
-#os.environ['CUDA_VISIBLE_DEVICES'] = '2'
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.loader import DataLoader
-from torch_geometric.data import Data, Batch
-
-import arguments
-from model import DeepSLIP
-from dataset import PDBbindDataset
-import utils
+import time
 import traceback
 from datetime import datetime
 
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
 import torch.cuda.amp as amp
 import torch.distributed as dist
 import torch.multiprocessing as mp
-import torch.backends.cudnn as cudnn
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
+from torch_geometric.data import Batch, Data
+from torch_geometric.loader import DataLoader
+
+import arguments
+import utils
+from dataset import PDBbindDataset
+from model import DeepSLIP
+
+# os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+
+
+
 
 
 def sample_to_device(sample, device):
@@ -30,19 +33,19 @@ def sample_to_device(sample, device):
     sample["traj"].to(device)
     return
 
+
 def train(model, args, optimizer, data, train, device=None, scaler=None):
     model.train() if train else model.eval()
 
     i_batch = 0
-    total_losses, vae_losses, type_losses, dist_losses, ssl_losses = \
-            [], [], [], [], []
+    total_losses, vae_losses, type_losses, dist_losses, ssl_losses = [], [], [], [], []
     while True:
         sample = next(data, None)
         if sample is None:
             break
 
         sample_to_device(sample, device)
-        
+
         if args.autocast:
             with amp.autocast():
                 try:
@@ -85,19 +88,14 @@ def train(model, args, optimizer, data, train, device=None, scaler=None):
 
 
 def main_worker(gpu, ngpus_per_node, args):
-
     ############ Distributed Data Parallel #############
     # https://pytorch.org/docs/stable/distributed.html#environment-variable-initialization
     rank = gpu
-    #print("Rank:", rank, flush=True)
+    # print("Rank:", rank, flush=True)
     os.environ["MASTER_ADDR"] = "127.0.0.1"
     os.environ["MASTER_PORT"] = args.master_port
 
-    dist.init_process_group(
-            "nccl", 
-            rank=rank, 
-            world_size=args.world_size
-    )
+    dist.init_process_group("nccl", rank=rank, world_size=args.world_size)
     print(utils.text_filling(f"Finished Setting DDP: CUDA:{rank}"), flush=True)
     ####################################################
 
@@ -110,36 +108,27 @@ def main_worker(gpu, ngpus_per_node, args):
         os.makedirs(save_dir, exist_ok=True)
 
     # Dataloader
-    train_dataset = PDBbindDataset(args, mode='train')
-    valid_dataset = PDBbindDataset(args, mode='valid')
+    train_dataset = PDBbindDataset(args, mode="train")
+    valid_dataset = PDBbindDataset(args, mode="valid")
 
     ############ Distributed Data Parallel #############
     train_sampler = DistributedSampler(
-            train_dataset,
-            num_replicas=args.world_size,
-            rank=rank
+        train_dataset, num_replicas=args.world_size, rank=rank
     )
     valid_sampler = DistributedSampler(
-            valid_dataset,
-            num_replicas=args.world_size,
-            rank=rank,
-            shuffle=False
+        valid_dataset, num_replicas=args.world_size, rank=rank, shuffle=False
     )
     ####################################################
     train_dataloader = DataLoader(
-            train_dataset,
-            1,
-            num_workers=0,
-            pin_memory=True,
-            sampler=train_sampler
+        train_dataset, 1, num_workers=0, pin_memory=True, sampler=train_sampler
     )
     valid_dataloader = DataLoader(
-            valid_dataset,
-            1, 
-            num_workers=0,
-            pin_memory=True,
-            shuffle=False,
-            sampler=valid_sampler
+        valid_dataset,
+        1,
+        num_workers=0,
+        pin_memory=True,
+        shuffle=False,
+        sampler=valid_sampler,
     )
     N_TRAIN_DATA = len(train_dataset)
     N_VALID_DATA = len(valid_dataset)
@@ -157,21 +146,21 @@ def main_worker(gpu, ngpus_per_node, args):
     ############ Distributed Data Parallel #############
     # Wrap the model
     model = DDP(model, device_ids=[gpu], find_unused_parameters=True)
-    #model = DDP(model, device_ids=[gpu])
+    # model = DDP(model, device_ids=[gpu])
     cudnn.benchmark = True
     ####################################################
 
     if not args.restart_file and rank == 0:
-        print("Number of Parameters: ", \
-              sum(p.numel() for p in model.parameters() if p.requires_grad), \
-              flush=True)
+        print(
+            "Number of Parameters: ",
+            sum(p.numel() for p in model.parameters() if p.requires_grad),
+            flush=True,
+        )
         print(utils.text_filling("Finished Loading Model"), flush=True)
 
     # Optimizer
     optimizer = torch.optim.Adam(
-            model.parameters(), 
-            lr=args.lr,
-            weight_decay=args.weight_decay
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
     )
 
     # Scaler (AMP)
@@ -194,58 +183,69 @@ def main_worker(gpu, ngpus_per_node, args):
     lr_tick = 0
     for epoch in range(start_epoch, args.num_epochs):
         if epoch == 0 and rank == 0:
-            print(f"EPOCH || " + \
-                  f"TRA_VAE | " + \
-                  f"TRA_SSL | " + \
-                  f"TRA_TYPE | " + \
-                  f"TRA_DIST | " + \
-                  f"TRA_TOT || " + \
-                  f"VAL_VAE | " + \
-                  f"VAL_SSL | " + \
-                  f"VAL_TYPE | " + \
-                  f"VAL_DIST | " + \
-                  f"VAL_TOT || " + \
-                  f"TIME/EPOCH | " + \
-                  f"LR | " + \
-                  f"BEST_EPOCH", flush=True)
+            print(
+                f"EPOCH || "
+                + f"TRA_VAE | "
+                + f"TRA_SSL | "
+                + f"TRA_TYPE | "
+                + f"TRA_DIST | "
+                + f"TRA_TOT || "
+                + f"VAL_VAE | "
+                + f"VAL_SSL | "
+                + f"VAL_TYPE | "
+                + f"VAL_DIST | "
+                + f"VAL_TOT || "
+                + f"TIME/EPOCH | "
+                + f"LR | "
+                + f"BEST_EPOCH",
+                flush=True,
+            )
 
         train_data = iter(train_dataloader)
         valid_data = iter(valid_dataloader)
-        
+
         # KL annealing
-        args.vae_coeff = vae_coeff_final + \
-                (vae_coeff_init - vae_coeff_final) * \
-                ((1 - args.vae_loss_beta)**epoch)
+        args.vae_coeff = vae_coeff_final + (vae_coeff_init - vae_coeff_final) * (
+            (1 - args.vae_loss_beta) ** epoch
+        )
 
         st = time.time()
 
-        train_total_losses, train_vae_losses, train_type_losses, \
-                train_dist_losses, train_ssl_losses = \
-                train(
-                        model=model, 
-                        args=args,
-                        optimizer=optimizer,
-                        data=train_data,
-                        train=True,
-                        device=gpu,
-                        scaler=scaler
-                )
-        
+        (
+            train_total_losses,
+            train_vae_losses,
+            train_type_losses,
+            train_dist_losses,
+            train_ssl_losses,
+        ) = train(
+            model=model,
+            args=args,
+            optimizer=optimizer,
+            data=train_data,
+            train=True,
+            device=gpu,
+            scaler=scaler,
+        )
+
         # validation process
-        valid_total_losses, valid_vae_losses, valid_type_losses, \
-                valid_dist_losses, valid_ssl_losses = \
-                train(
-                        model=model, 
-                        args=args,
-                        optimizer=optimizer,
-                        data=valid_data,
-                        train=False,
-                        device=gpu,
-                        scaler=scaler
-                )
+        (
+            valid_total_losses,
+            valid_vae_losses,
+            valid_type_losses,
+            valid_dist_losses,
+            valid_ssl_losses,
+        ) = train(
+            model=model,
+            args=args,
+            optimizer=optimizer,
+            data=valid_data,
+            train=False,
+            device=gpu,
+            scaler=scaler,
+        )
 
         et = time.time()
-        
+
         if valid_total_losses < min_valid_loss:
             min_valid_loss = valid_total_losses
             best_epoch = epoch
@@ -263,23 +263,25 @@ def main_worker(gpu, ngpus_per_node, args):
         if lr_tick > 20:
             print("No longer model is learning: training stop")
             exit()
-        
-        if rank == 0:
-            print(f"{epoch} || " + \
-                  f"{train_vae_losses:.3f} | " + \
-                  f"{train_ssl_losses:.3f} | " + \
-                  f"{train_type_losses:.3f} | " + \
-                  f"{train_dist_losses:.3f} | " + \
-                  f"{train_total_losses:.3f} || " + \
-                  f"{valid_vae_losses:.3f} | " + \
-                  f"{valid_ssl_losses:.3f} | " + \
-                  f"{valid_type_losses:.3f} | " + \
-                  f"{valid_dist_losses:.3f} | " + \
-                  f"{valid_total_losses:.3f} || " + \
-                  f"{(et - st):.2f} | " + \
-                  f"{[group['lr'] for group in optimizer.param_groups][0]:.4f} | " + \
-                  f"{best_epoch}{'*' if lr_tick==0 else ''}", flush=True)
 
+        if rank == 0:
+            print(
+                f"{epoch} || "
+                + f"{train_vae_losses:.3f} | "
+                + f"{train_ssl_losses:.3f} | "
+                + f"{train_type_losses:.3f} | "
+                + f"{train_dist_losses:.3f} | "
+                + f"{train_total_losses:.3f} || "
+                + f"{valid_vae_losses:.3f} | "
+                + f"{valid_ssl_losses:.3f} | "
+                + f"{valid_type_losses:.3f} | "
+                + f"{valid_dist_losses:.3f} | "
+                + f"{valid_total_losses:.3f} || "
+                + f"{(et - st):.2f} | "
+                + f"{[group['lr'] for group in optimizer.param_groups][0]:.4f} | "
+                + f"{best_epoch}{'*' if lr_tick==0 else ''}",
+                flush=True,
+            )
 
         # Save model
         name = os.path.join(save_dir, f"save_{epoch}.pt")
@@ -288,33 +290,35 @@ def main_worker(gpu, ngpus_per_node, args):
             torch.save(model.state_dict(), name)
 
 
-
 def main():
-
     now = datetime.now()
-    print(f"Train starts at {now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}...")
+    print(
+        f"Train starts at {now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}..."
+    )
 
     args = arguments.train_args_parser()
     d = vars(args)
     print(utils.text_filling("PARAMETER SETTINGS"), flush=True)
-    for a in d: print(a, "=", d[a])
-    print(80*'#', flush=True)
+    for a in d:
+        print(a, "=", d[a])
+    print(80 * "#", flush=True)
 
     args.master_port = utils.find_free_port()
 
     args.distributed = args.world_size > 1
-    os.environ['CUDA_VISIBLE_DEVICES'] = utils.get_cuda_visible_devices(args.world_size)
+    os.environ["CUDA_VISIBLE_DEVICES"] = utils.get_cuda_visible_devices(args.world_size)
     if args.distributed:
         mp.spawn(
-                main_worker, 
-                nprocs=args.world_size, 
-                args=(args.world_size, args,),
+            main_worker,
+            nprocs=args.world_size,
+            args=(
+                args.world_size,
+                args,
+            ),
         )
     else:
         main_worker(0, args.world_size, args)
 
 
 if __name__ == "__main__":
-    
     main()
-
