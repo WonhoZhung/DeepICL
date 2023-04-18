@@ -213,6 +213,7 @@ class PDBbindDataProcessor:
         self.keys = [s.split("/")[-2] for s in self.ligand_data_fns]
 
         self._processed_keys = []
+        self._tmp_dir = "/home/wonho/trash/"
 
     def __len__(
         self,
@@ -342,7 +343,7 @@ class PDBbindDataProcessor:
     def _join_complex(self, ligand_fn, pocket_fn, complex_fn=None):
         if complex_fn is None:
             fd, complex_fn = tempfile.mkstemp(
-                suffix=".pdb", prefix="WH_tmp_com_", dir="/home/wonho/trash"
+                suffix=".pdb", prefix="WH_tmp_com_", dir=self._tmp_dir
             )
         command = f"obabel {ligand_fn} {pocket_fn} -O {complex_fn} -j -d 2> /dev/null"
         os.system(command)
@@ -369,7 +370,6 @@ class PDBbindDataProcessor:
         ligand_mol,
         protein_pdb,
         cutoff=5.0,
-        base_dir="/home/wonho/trash",
         use_whole_protein=False,
     ):
         parser = PDBParser()
@@ -409,7 +409,7 @@ class PDBbindDataProcessor:
         io = PDBIO()
         io.set_structure(structure)
 
-        fd, path = tempfile.mkstemp(suffix=".pdb", prefix="WH_tmp_poc_", dir=base_dir)
+        fd, path = tempfile.mkstemp(suffix=".pdb", prefix="WH_tmp_poc_", dir=self._tmp_dir)
         if use_whole_protein:
             io.save(path, NonHeteroSelect())
         else:
