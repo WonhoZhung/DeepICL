@@ -23,7 +23,7 @@ Then, run the following commands to process the data:
 cd data
 python preprocessing.py {PDBBIND_DATA_DIR} {PROCESSED_DATA_DIR} {NCPU}
 ```
-If you are processing a data for sampling, you can follow the instructions in [Demo]().
+If you are processing a data for sampling, you can follow the instructions in [Demo](https://github.com/WonhoZhung/DeepICL/blob/master/DeepICL_Ligand_Elaboration_DEMO.ipynb).
 
 
 ## Training DeepICL
@@ -37,7 +37,7 @@ python -u train.py --world_size {NGPU} --save_dir {SAVE_DIR} --data_dir {DATA_DI
 For sampling ligands via DeepICL, run the following command:
 ```
 cd script
-python -u generate.py --ngpu 0 --ncpu {NCPU} --k 8 --data_dir {DATA_DIR} --key_dir {KEY_DIR} --restart_dir {SAVED_MODEL_DIR} --result_dir {RESULT_DIR} --num_layers 6 --num_dense_layers 3 --num_hidden_feature 128 --num_sample {NUM_SAMPLE} --max_num_add_atom 30 --dist_one_hot_param1 0 10 25 --dist_one_hot_param2 0 15 300 --temperature_factor1 0.1 --temperature_factor2 0.1 --radial_limits 0.9 2.2 --add_noise --pocket_coeff_max 10.0 --pocket_coeff_thr 2.5 --pocket_coeff_beta 0.91 --conditional --verbose -y
+python -u generate.py --ngpu 0 --ncpu {NCPU} --k 8 --data_dir {DATA_DIR} --key_dir {KEY_DIR} --restart_dir {SAVED_MODEL_DIR} --result_dir {RESULT_DIR} --num_layers 6 --num_dense_layers 3 --num_hidden_feature 128 --num_sample {NUM_SAMPLE} --max_num_add_atom 30 --dist_one_hot_param1 0 10 25 --dist_one_hot_param2 0 15 300 --temperature_factor1 0.1 --temperature_factor2 0.1 --radial_limits 0.9 2.2 --add_noise --pocket_coeff_max 10.0 --pocket_coeff_thr 2.5 --pocket_coeff_beta 0.91 --conditional --use_condition --verbose -y --memo {MEMO for sampling details}
 ```
 
-Ligand elaboration with predefined core is demonstrated in [Demo]().
+Ligand elaboration with predefined core is demonstrated in [Demo](https://github.com/WonhoZhung/DeepICL/blob/master/DeepICL_Ligand_Elaboration_DEMO.ipynb).
