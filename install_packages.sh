@@ -12,6 +12,6 @@ conda install pytorch=1.9.0 cudatoolkit=10.2 -c pytorch -y
 conda install pyg=2.0.3 -c pyg -c conda-forge -y
 
 # 4. install others
-conda install -c rdkit rdkit=2022.03.3 -y
+conda install -c rdkit rdkit=2022.09.1 -y
 conda install -c conda-forge biopython=1.77 openbabel=3.1.1 -y
 conda install -c conda-forge plip=2.2.2
