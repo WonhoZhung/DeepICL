@@ -1,6 +1,4 @@
-import rdkit
 import torch
-import torch.nn as nn
 from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem, rdDetermineBonds
 from torch_geometric.data import Batch, Data, HeteroData
@@ -8,8 +6,6 @@ from torch_geometric.nn import radius_graph
 
 RDLogger.DisableLog("rdApp.*")
 
-import glob
-import math
 import multiprocessing
 import os
 import pickle
@@ -25,7 +21,6 @@ from scipy.spatial.transform import Rotation
 import utils
 from arguments import generate_args_parser
 from dataset import DataProcessor
-from layers import HardOneHot, SoftOneHot
 from model import DeepICL
 
 
@@ -39,7 +34,7 @@ class Generator(DataProcessor):
         self.result_dir = args.result_dir
         self.add_noise = args.add_noise
 
-        self.ligand_coeff = 1.0  # TODO
+        self.ligand_coeff = 1.0  # default
         self.pocket_coeff_max = args.pocket_coeff_max
         self.pocket_coeff_thr = args.pocket_coeff_thr
         self.pocket_coeff_beta = args.pocket_coeff_beta
@@ -119,7 +114,6 @@ class Generator(DataProcessor):
         input = self._get_input_from_data(self.data_list[data_idx])
         output = self._generate_molecule(*input)
         msg = f"{name}"
-        # msg = f"{name} --- Score: {float(output[2]):.3f}"
         utils.write_xyz(output[0], output[1], msg=msg, fn=fn, is_onehot=True)
         os.system(f"obabel {fn} -O {fn2} 2> /dev/null")
         os.unlink(fn)
@@ -170,21 +164,31 @@ class Generator(DataProcessor):
             _,
             _,
             pocket_prop,
+            center_of_mass
         ) = data
 
         # Pocket info
         p_dict = dict()
-        p_Z = torch.Tensor(pocket_type)  # pocket
+        p_Z = torch.Tensor(pocket_type)
         p_R = torch.Tensor(pocket_coord)
         p_c = torch.Tensor(pocket_prop)
         if self.add_noise:
-            t, R = self._get_random_transformation(
+            T, R = self._get_random_transformation(
                 self.translation_coeff, self.rotation_coeff
             )
-            p_R = p_R @ R + t
-            p_dict.update({"translation": t, "rotation": R})
+            p_R = p_R @ R + T
+            p_dict.update({"translation": T, "rotation": R})
         p_n = p_Z.shape[0]
-        p_dict.update({"p_Z": p_Z, "p_R": p_R, "p_n": p_n, "p_cond": p_c})
+        com = torch.Tensor(center_of_mass)
+        p_dict.update(
+            {
+                "p_Z": p_Z, 
+                "p_R": p_R, 
+                "p_n": p_n, 
+                "p_cond": p_c,
+                "com": com
+            }
+        )
 
         if self.use_scaffold:
             s_Z = torch.Tensor(ligand_type)[:scaff_n]
@@ -242,7 +246,6 @@ class Generator(DataProcessor):
         l_R_final = l_R_init[1:]
 
         traj = [(l_Z_final, l_R_final)]
-        score = torch.Tensor([0.0])
 
         while i < self.max_num_atom:
             if i > 0 and torch.sum(avail) == 0:
@@ -369,7 +372,6 @@ class Generator(DataProcessor):
                 )
                 next_type_ind = torch.multinomial(next_type_log_prob.exp(), 1)[0]
 
-            score += next_type_log_prob[next_type_ind]
 
             if next_type_ind == self.args.num_ligand_atom_feature - 1:  # Termination
                 avail[now] = 0.0
@@ -411,7 +413,6 @@ class Generator(DataProcessor):
                 grid_log_prob -= torch.logsumexp(grid_log_prob, -1, keepdim=True)
                 next_coord_ind = torch.multinomial(grid_log_prob.exp(), 1)[0]
 
-            score += grid_log_prob[next_coord_ind]
 
             next_coord = grid[next_coord_ind]
             next_coord = next_coord.unsqueeze(0)
@@ -426,21 +427,21 @@ class Generator(DataProcessor):
             avail[i] = 1.0
             i += 1
 
-        score /= len(traj)
 
         if self.add_noise:
             l_R_final = (l_R_final - p_dict["translation"]) @ torch.t(
                 p_dict["rotation"]
             )
+        l_R_final += p_dict["com"]
 
-        if self.get_traj:  # TODO
+        if self.get_traj:
             # Make traj file
             for i, (z, r) in enumerate(traj):
-                utils.write_xyz(z, r, msg=f"{float(score)}", fn=f"traj/traj_{i}.xyz")
-                utils.xyz_to_sdf(f"traj/traj_{i}.xyz", f"tmp_traj/traj_{i}.sdf")
+                utils.write_xyz(z, r, msg=f"{i}-th trajectory", fn=f"traj/traj_{i}.xyz")
+                utils.xyz_to_sdf(f"traj/traj_{i}.xyz", f"traj/traj_{i}.sdf")
                 os.unlink(f"traj/traj_{i}.xyz")
 
-        return l_Z_final, l_R_final, score, torch.sum(avail) == 0
+        return l_Z_final, l_R_final, torch.sum(avail) == 0
 
     @torch.no_grad()
     def _make_grid(

@@ -5,17 +5,11 @@ from torch_geometric.data import Batch, HeteroData
 from torch_geometric.nn import radius_graph
 
 RDLogger.DisableLog("rdApp.*")
-import glob
 import os
 import pickle
-import random
 import traceback
 
-import numpy as np
-from rdkit.Chem.AllChem import CalcNumRotatableBonds, GetAdjacencyMatrix
-
-import utils
-from layers import HardOneHot, SoftOneHot
+from layers import SoftOneHot
 from utils import ATOM_TYPES
 
 
@@ -218,6 +212,7 @@ class DataProcessor(object):
             _,
             _,
             pocket_prop,
+            center_of_mass
         ) = data
 
         # Dimension
@@ -375,38 +370,5 @@ class PDBbindDataset(MoleculeDataset):
 
 
 if __name__ == "__main__":
-    import argparse
 
-    parser = argparse.ArgumentParser()
-    args = parser.parse_args()
-
-    args.num_ligand_atom_feature = 9
-    args.num_pocket_atom_feature = 51
-    args.num_hidden_feature = 32
-    args.num_dense_layers = 3
-    args.num_layers = 4
-    args.gamma1 = 5e1
-    args.gamma2 = 1e1
-    args.dist_one_hot_param1 = [0, 10, 25]
-    args.dist_one_hot_param2 = [0, 15, 300]
-    args.data_dir = "../data/data/"
-    args.key_dir = "../data/tmp_single/keys/"
-    args.k = 8
-    args.conditional = False
-    args.node_coeff = 0.5
-
-    dataset = PDBbindDataset(args, mode="train")
-    idx = dataset.key_list.index("10gs")
-
-    data = dataset.__getitem__(idx)["whole"]
-
-    from layers import IAI_Layer
-    from model import Embedding
-
-    emb = Embedding(args)
-    lay = IAI_Layer(args)
-
-    data["ligand"].h = emb.l_node_emb(data["ligand"].x)
-    data["pocket"].h = emb.p_node_emb(data["pocket"].x)
-
-    lay(data)
+    pass

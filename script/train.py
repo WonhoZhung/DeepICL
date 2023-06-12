@@ -184,20 +184,20 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(start_epoch, args.num_epochs):
         if epoch == 0 and rank == 0:
             print(
-                f"EPOCH || "
-                + f"TRA_VAE | "
-                + f"TRA_SSL | "
-                + f"TRA_TYPE | "
-                + f"TRA_DIST | "
-                + f"TRA_TOT || "
-                + f"VAL_VAE | "
-                + f"VAL_SSL | "
-                + f"VAL_TYPE | "
-                + f"VAL_DIST | "
-                + f"VAL_TOT || "
-                + f"TIME/EPOCH | "
-                + f"LR | "
-                + f"BEST_EPOCH",
+                "EPOCH || "
+                + "TRA_VAE | "
+                + "TRA_SSL | "
+                + "TRA_TYPE | "
+                + "TRA_DIST | "
+                + "TRA_TOT || "
+                + "VAL_VAE | "
+                + "VAL_SSL | "
+                + "VAL_TYPE | "
+                + "VAL_DIST | "
+                + "VAL_TOT || "
+                + "TIME/EPOCH | "
+                + "LR | "
+                + "BEST_EPOCH",
                 flush=True,
             )
 
@@ -293,7 +293,7 @@ def main_worker(gpu, ngpus_per_node, args):
 def main():
     now = datetime.now()
     print(
-        f"Train starts at {now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}..."
+        f"Train starts at {now.year}-{now.month}-{now.day}-{now.hour}-{now.minute}-{now.second}"
     )
 
     args = arguments.train_args_parser()

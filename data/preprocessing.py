@@ -1,12 +1,17 @@
 import os
-import pickle
 import sys
 import time
 from multiprocessing import Pool
 
-from tqdm import tqdm
-
 from processor import PDBbindDataProcessor
+
+'''
+Script to run data processor via multi-processing
+In bash, run the following script:
+
+python preprocessor.py {DATA_DIR} {SAVE_DIR} {NCPU}
+'''
+
 
 # 1. Initialize data processor
 data_dir = sys.argv[1]
@@ -17,7 +22,6 @@ if len(os.listdir(save_dir)) > 0:
     if token == "y":
         os.system(f"rm {save_dir}/*")
         time.sleep(5.0)
-        # print(len(os.listdir(save_dir)))
     elif token == "n":
         pass
     else:

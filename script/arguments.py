@@ -50,14 +50,14 @@ def train_args_parser():
         help="dist. one-hot param for representation",
         type=int,
         nargs="+",
-        default=[0, 15, 30],
+        default=[0, 10, 25],
     )
     parser.add_argument(
         "--dist_one_hot_param2",
         help="dist. one-hot param for next distance",
         type=int,
         nargs="+",
-        default=[0, 10, 200],
+        default=[0, 15, 300],
     )
     parser.add_argument("--conditional", help="conditional", action="store_true")
     parser.add_argument(
@@ -70,10 +70,10 @@ def train_args_parser():
 
     # TRAINING SETTINGS
     parser.add_argument("--num_epochs", help="num epochs", type=int)
-    parser.add_argument("--lr", help="lr", type=float, default=2e-3)
-    parser.add_argument("--lr_decay", help="lr_decay", type=float, default=0.9)
-    parser.add_argument("--lr_tolerance", help="lr_tolerance", type=int, default=5)
-    parser.add_argument("--lr_min", help="lr_min", type=float, default=2e-4)
+    parser.add_argument("--lr", help="lr", type=float, default=1e-3)
+    parser.add_argument("--lr_decay", help="lr_decay", type=float, default=0.8)
+    parser.add_argument("--lr_tolerance", help="lr_tolerance", type=int, default=4)
+    parser.add_argument("--lr_min", help="lr_min", type=float, default=1e-6)
     parser.add_argument("--weight_decay", help="weight_decay", type=float, default=0.0)
     parser.add_argument(
         "--vae_loss_coeff",

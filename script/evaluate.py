@@ -1,17 +1,11 @@
-import os
-
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.RDLogger import DisableLog
-
 DisableLog("rdApp.*")
+
 import argparse
 import glob
 import pickle
-import sys
-import traceback
-
-from tqdm import tqdm
 
 
 def save_results(mol_list, fn):
@@ -55,7 +49,6 @@ def filter_generated_results(keys, result_dir, train_smiles=None, filter_level=0
                 smi = Chem.CanonSmiles(Chem.MolToSmiles(mol))
                 assert "." not in smi  # Check mol is not fragmentized
             except Exception as e:
-                # print(fn, traceback.format_exc())
                 continue
 
             for a in mol.GetAtoms():
@@ -131,19 +124,15 @@ def filter_generated_results(keys, result_dir, train_smiles=None, filter_level=0
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
+    parser.add_argument("--result_dir", help="directory for generated molecules", type=str)
+    parser.add_argument("--key_dir", help="directory for keys", type=str)
+    parser.add_argument("--smi_dir", help="directory for training set smiles", type=str)
     parser.add_argument(
-        "--result_dir", help="result_dir", type=str, default="results/exp_5_9"
+        "--filter_level", 
+        help="filter level, 0: All, 1: Valid, 2: Unique, 3: Novel", 
+        type=int, 
+        default=0
     )
-    parser.add_argument(
-        "--key_dir",
-        help="key_dir",
-        type=str,
-        default="../data/generate_keys_3/test_keys.pkl",
-    )
-    parser.add_argument(
-        "--smi_dir", help="smi_dir", type=str, default="../data/keys/train_smiles.txt"
-    )
-    parser.add_argument("--filter_level", help="filter_level", type=int, default=0)
 
     args = parser.parse_args()
 

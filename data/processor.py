@@ -1,7 +1,6 @@
 import glob
 import os
 import random
-import sys
 import tempfile
 import traceback
 
@@ -19,33 +18,17 @@ from Bio.PDB.PDBIO import Select
 from plip.structure.preparation import PDBComplex
 from scipy.spatial import distance_matrix
 
-DATA_DIR = "/home/wonho/work/data/PDBbind_v2020/total-set/"
-SAVE_DIR = "/home/wonho/work/DL/gschnet/DeepSLIP/data/train/"
+
+DATA_DIR = "" ## directory to PDBbind v2020 general set 
+SAVE_DIR = "" ## directory where processed data will be saved
 
 ATOM_TYPES = ["C", "N", "O", "F", "P", "S", "Cl", "Br"]
 AA_TYPES = [
-    "GLY",
-    "ALA",
-    "VAL",
-    "LEU",
-    "ILE",
-    "PHE",
-    "PRO",
-    "MET",
-    "TRP",
-    "SER",
-    "THR",
-    "TYR",
-    "CYS",
-    "ARG",
-    "HIS",
-    "LYS",
-    "ASN",
-    "ASP",
-    "GLN",
-    "GLU",
+    "GLY", "ALA", "VAL", "LEU", "ILE",
+    "PHE", "PRO", "MET", "TRP", "SER",
+    "THR", "TYR", "CYS", "ARG", "HIS",
+    "LYS", "ASN", "ASP", "GLN", "GLU"
 ]
-# INTERACTION_TYPES = ["pipi", "salt", "hbond", "hydro"]
 INTERACTION_TYPES = ["pipi", "anion", "cation", "hbd", "hba", "hydro"]
 HYDROPHOBICS = ["F", "CL", "BR", "I"]
 HBOND_DONOR_SMARTS = ["[!#6;!H0]"]
@@ -144,9 +127,6 @@ def get_properties(mol, key="ligand", pdb_id=None):
     # 6. Free SASA
     sasa = calc_free_sasa(mol)
 
-    # 7. Ring counts
-    ring = mol.GetRingInfo().NumRings()
-
     properties.update(
         {
             "mw": np.array([mw]),
@@ -184,7 +164,7 @@ class PDBbindDataProcessor:
         data_dir=DATA_DIR,
         save_dir=SAVE_DIR,
         max_atom_num=MAX_ATOM_NUM,  # maximum number of ligand atoms
-        max_add_atom_num=MAX_ADD_ATOM_NUM,  # maximum number of ligand atoms to add from scaffold
+        max_add_atom_num=MAX_ADD_ATOM_NUM,  # maximum number of ligand atoms to add 
         seed=SEED,
         use_whole_protein=False,
         predefined_scaffold=None,
@@ -213,7 +193,7 @@ class PDBbindDataProcessor:
         self.keys = [s.split("/")[-2] for s in self.ligand_data_fns]
 
         self._processed_keys = []
-        self._tmp_dir = "/home/wonho/trash/"
+        self._tmp_dir = "/trash/" ## directory of a template file
 
     def __len__(
         self,
@@ -343,7 +323,7 @@ class PDBbindDataProcessor:
     def _join_complex(self, ligand_fn, pocket_fn, complex_fn=None):
         if complex_fn is None:
             fd, complex_fn = tempfile.mkstemp(
-                suffix=".pdb", prefix="WH_tmp_com_", dir=self._tmp_dir
+                suffix=".pdb", prefix="tmp_com_", dir=self._tmp_dir
             )
         command = f"obabel {ligand_fn} {pocket_fn} -O {complex_fn} -j -d 2> /dev/null"
         os.system(command)
@@ -409,7 +389,9 @@ class PDBbindDataProcessor:
         io = PDBIO()
         io.set_structure(structure)
 
-        fd, path = tempfile.mkstemp(suffix=".pdb", prefix="WH_tmp_poc_", dir=self._tmp_dir)
+        fd, path = tempfile.mkstemp(
+            suffix=".pdb", prefix="tmp_poc_", dir=self._tmp_dir
+        )
         if use_whole_protein:
             io.save(path, NonHeteroSelect())
         else:
@@ -721,10 +703,7 @@ class PDBbindDataProcessor:
             ligand_coord = ligand_coord[ligand_order]
             ligand_adj = ligand_adj[:, ligand_order][ligand_order, :]
 
-            # Get properties
-            pdb_id = ligand_fn.split("/")[-1][:4]
-            # ligand_prop = get_properties(ligand_mol, "ligand", pdb_id)
-            # scaff_prop = get_properties(scaff_mol, "scaff", pdb_id)
+            #pdb_id = ligand_fn.split("/")[-1][:4]
 
             ligand_smi = Chem.CanonSmiles(Chem.MolToSmiles(ligand_mol))
             scaff_smi = Chem.CanonSmiles(Chem.MolToSmiles(scaff_mol))
@@ -742,6 +721,7 @@ class PDBbindDataProcessor:
                 ligand_smi,
                 scaff_smi,
                 pocket_cond,
+                center_of_mass
             )
 
         else:
@@ -755,9 +735,7 @@ class PDBbindDataProcessor:
             ligand_coord = ligand_coord[ligand_order]
             ligand_adj = ligand_adj[:, ligand_order][ligand_order, :]
 
-            # Get properties
-            pdb_id = ligand_fn.split("/")[-1][:4]
-            # ligand_prop = get_properties(ligand_mol, "ligand", pdb_id)
+            #pdb_id = ligand_fn.split("/")[-1][:4]
 
             ligand_smi = Chem.CanonSmiles(Chem.MolToSmiles(ligand_mol))
 
@@ -774,10 +752,10 @@ class PDBbindDataProcessor:
                 ligand_smi,
                 None,
                 pocket_cond,
+                center_of_mass
             )
 
     def run(self, idx):
-        # print(self.keys[idx], flush=True)
         data = self._processor(self.ligand_data_fns[idx], self.pocket_data_fns[idx])
         if data is None:
             print(self.keys[idx], flush=True)
@@ -788,55 +766,5 @@ class PDBbindDataProcessor:
 
 
 if __name__ == "__main__":
-    import torch
 
-    SAVE_DIR = "./data/"
-    DATA_DIR = "/home/wonho/work/data/PDBbind_v2020/total-set/"
-
-    processor = PDBbindDataProcessor(DATA_DIR, SAVE_DIR, use_whole_protein=False)
-    idx = processor.keys.index("1dis")
-
-    ligand_fn = processor.ligand_data_fns[idx]
-    pocket_fn = processor.pocket_data_fns[idx]
-
-    ligand_mol = read_file(ligand_fn)
-    pocket_mol, pocket_str, pocket_fn_2 = processor._extract_binding_pocket(
-        ligand_mol, pocket_fn, use_whole_protein=True
-    )
-
-    complex_mol, complex_fn = processor._join_complex(ligand_fn, pocket_fn_2)
-
-    # print(complex_fn)
-
-    ligand_n, pocket_n, complex_n = (
-        ligand_mol.GetNumAtoms(),
-        pocket_mol.GetNumAtoms(),
-        complex_mol.GetNumAtoms(),
-    )
-    interaction_info = processor._get_complex_interaction_info(complex_fn)
-    pocket_cond = processor._get_pocket_interaction_matrix(
-        ligand_n, pocket_n, interaction_info
-    )
-    pocket_cond = torch.Tensor(pocket_cond)
-
-    print(interaction_info)
-    print(pocket_cond.shape)
-    print(torch.nonzero(pocket_cond[:, :-1]))
-
-    exit()
-
-    interaction_info = processor._get_complex_interaction_info_with_heuristics(
-        ligand_mol, pocket_mol
-    )
-    pocket_cond = processor._get_pocket_interaction_matrix(
-        ligand_n, pocket_n, interaction_info
-    )
-    pocket_cond = torch.Tensor(pocket_cond)
-
-    print(interaction_info)
-    print(pocket_cond.shape)
-    print(torch.nonzero(pocket_cond[:, :-1]))
-
-    exit()
-
-    processor.run(idx)
+    pass
