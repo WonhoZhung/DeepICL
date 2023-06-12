@@ -194,11 +194,11 @@ def write_xyz(types, coords, msg="", fn=None, is_onehot=True):
 
 
 def xyz_to_sdf(xyz_fn, sdf_fn):
-    os.system(f"obabel {xyz_fn} -O {sdf_fn}")
+    os.system(f"obabel '{xyz_fn}' -O '{sdf_fn}'")
 
 
 def xyz_to_pdb(xyz_fn, pdb_fn):
-    os.system(f"obabel {xyz_fn} -O {pdb_fn}")
+    os.system(f"obabel '{xyz_fn}' -O '{pdb_fn}'")
 
 
 def text_filling(text, char="#", num_char=80):

@@ -112,7 +112,7 @@ class Generator(DataProcessor):
         output = self._generate_molecule(*input)
         msg = f"{name}"
         utils.write_xyz(output[0], output[1], msg=msg, fn=fn, is_onehot=True)
-        os.system(f"obabel {fn} -O {fn2} 2> /dev/null")
+        os.system(f"obabel '{fn}' -O '{fn2}' 2> /dev/null")
         os.unlink(fn)
         return
 
@@ -514,11 +514,11 @@ def main():
         os.mkdir(args.result_dir)
     if len(os.listdir(args.result_dir)) > 0:
         if args.y:
-            os.system(f"rm {args.result_dir}/*")
+            os.system(f"rm '{args.result_dir}/*'")
         else:
             token = input(f"Remove existing files in {args.result_dir}?: (y/n)")
             if token == "y":
-                os.system(f"rm {args.result_dir}/*")
+                os.system(f"rm '{args.result_dir}/*'")
             elif token == "n":
                 pass
             else:
