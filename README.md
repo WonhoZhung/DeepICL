@@ -1,13 +1,43 @@
 # DeepICL
-**Deep** **I**nteraction-**C**onditioned **L**igand generative model
+
+[//]: # (Badges)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+This is a repository of our paper, "A Protein-Ligand Interaction-focused 3D Molecular Generative Framework for Generalizable Structure-based Drug Design" (ChemRxiv link).
+
+Inspired by how the practitioners manage to improve the potency of a ligand toward a target protein, we devised a strategy where prior knowledge of appropriate interactions navigates the ligand generation.
+Our proposed model, DeepICL (**Deep** **I**nteraction-**C**onditioned **L**igand generative model), employs an interaction condition that captures the local pocket environment, to precisely control the generation process of a ligand inside a binding pocket.
 
 
-## Train
+## Install packages
+You can install required packages by running following commands:
 ```
-python -u train.py --world_size 4 --save_dir save/exp_0 --data_dir ../data/data/ --key_dir ../data/keys/ --num_layers 5 --num_dense_layers 3 --num_hidden_feature 64 --dist_one_hot_param1 0 15 30 --dist_one_hot_param2 0 10 200 --lr 2e-3 --num_epochs 1001 --save_every 1 --k 8 --vae_loss_beta 0.2 --lr_decay 0.8 --lr_tolerance 4 --lr_min 1e-6 --conditional > log/exp_0.out 2> log/exp_0.err
+chmod +x install_packages.sh
+bash install_packages.sh
 ```
 
-## Sampling
+## Data processing
+First, download general set of the PDBbind dataset from [Link](http://www.pdbbind.org.cn/).
+Then, run the following commands to process the data:
 ```
-python -u generate.py --ngpu 0 --ncpu 16 --k 8 --data_dir ../data/generate_data/ --key_dir ../data/generate_keys/ --restart_dir save/exp_0/save_41.pt --result_dir results/exp_0_0 --num_layers 5 --num_dense_layers 3 --num_hidden_feature 64 --num_sample 100 --max_num_add_atom 30 --dist_one_hot_param1 0 15 30 --dist_one_hot_param2 0 10 200 --temperature_factor1 0.1 --temperature_factor2 0.1 --radial_limits 0.9 2.2 --add_noise --pocket_coeff_max 10.0 --pocket_coeff_thr 2.5 --pocket_coeff_beta 0.91 --conditional --verbose -y
+cd data
+python preprocessing.py {PDBBIND_DATA_DIR} {PROCESSED_DATA_DIR} {NCPU}
 ```
+If you are processing a data for sampling, you can follow the instructions in [Demo]().
+
+
+## Training DeepICL
+For training DeepICL, run the following commands:
+```
+cd script
+python -u train.py --world_size {NGPU} --save_dir {SAVE_DIR} --data_dir {DATA_DIR} --key_dir {KEY_DIR} --num_layers 6 --num_dense_layers 3 --num_hidden_feature 128 --dist_one_hot_param1 0 10 25 --dist_one_hot_param2 0 15 300 --lr 1e-3 --num_epochs 1001 --save_every 1 --k 8 --vae_loss_beta 0.2 --lr_decay 0.8 --lr_tolerance 4 --lr_min 1e-6 --conditional
+```
+
+## Ligand sampling
+For sampling ligands via DeepICL, run the following command:
+```
+cd script
+python -u generate.py --ngpu 0 --ncpu {NCPU} --k 8 --data_dir {DATA_DIR} --key_dir {KEY_DIR} --restart_dir {SAVED_MODEL_DIR} --result_dir {RESULT_DIR} --num_layers 6 --num_dense_layers 3 --num_hidden_feature 128 --num_sample {NUM_SAMPLE} --max_num_add_atom 30 --dist_one_hot_param1 0 10 25 --dist_one_hot_param2 0 15 300 --temperature_factor1 0.1 --temperature_factor2 0.1 --radial_limits 0.9 2.2 --add_noise --pocket_coeff_max 10.0 --pocket_coeff_thr 2.5 --pocket_coeff_beta 0.91 --conditional --verbose -y
+```
+
+Ligand elaboration with predefined core is demonstrated in [Demo]().
