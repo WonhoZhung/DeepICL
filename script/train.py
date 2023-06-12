@@ -10,8 +10,6 @@ import torch.backends.cudnn as cudnn
 import torch.cuda.amp as amp
 import torch.distributed as dist
 import torch.multiprocessing as mp
-import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 from torch_geometric.data import Batch, Data

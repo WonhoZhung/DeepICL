@@ -1,12 +1,10 @@
-from math import pi as PI
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import scatter_add, scatter_max, scatter_mean
+from torch_scatter import scatter_add, scatter_mean
 
-from layers import EGCL, ConstrainedCrossAttention, IAGMN_Layer, SoftOneHot
+from layers import EGCL, ConstrainedCrossAttention, E3II_Layer
 
 
 class DeepICL(nn.Module):
@@ -156,7 +154,7 @@ class Embedding(nn.Module):
         )
         self.emb_dict = {"ligand": self.l_node_emb, "pocket": self.p_node_emb}
 
-        self.layers = nn.ModuleList([IAGMN_Layer(args) for _ in range(args.num_layers)])
+        self.layers = nn.ModuleList([E3II_Layer(args) for _ in range(args.num_layers)])
 
     def forward(self, data, cond=None):
         data["ligand"].h = self.l_node_emb(data["ligand"].x)

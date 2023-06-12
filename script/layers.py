@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch_scatter import scatter_add, scatter_mean, scatter_softmax
 
 
-class IAGMN_Layer(nn.Module):  # Invariant Attention Graph Matching Network
+class E3II_Layer(nn.Module):  # E(3)-invariant interaction layer
     def __init__(self, args):
         super().__init__()
 

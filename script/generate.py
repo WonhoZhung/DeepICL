@@ -9,10 +9,7 @@ RDLogger.DisableLog("rdApp.*")
 import multiprocessing
 import os
 import pickle
-import random
 import time
-import traceback
-from copy import deepcopy
 from math import pi as PI
 
 import numpy as np
