@@ -20,7 +20,7 @@ from torch_geometric.loader import DataLoader
 import arguments
 import utils
 from dataset import PDBbindDataset
-from model import DeepSLIP
+from model import DeepICL
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
@@ -138,7 +138,7 @@ def main_worker(gpu, ngpus_per_node, args):
         print(utils.text_filling("Finished Loading Datasets"), flush=True)
 
     # Model initialize
-    model = DeepSLIP(args)
+    model = DeepICL(args)
     torch.cuda.set_device(gpu)
     model.cuda(gpu)
     model = utils.initialize_model(model, args.world_size > 0, args.restart_file)

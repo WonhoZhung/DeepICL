@@ -1,12 +1,8 @@
 from math import pi as PI
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import Linear
-from torch_geometric.data import HeteroData
-from torch_geometric.nn import MessagePassing
 from torch_scatter import scatter_add, scatter_mean, scatter_softmax
 
 

@@ -1,6 +1,4 @@
-import rdkit
 import torch
-import torch.nn as nn
 from rdkit import Chem, RDLogger
 from torch.utils.data import Dataset
 from torch_geometric.data import Batch, HeteroData
@@ -12,8 +10,6 @@ import os
 import pickle
 import random
 import traceback
-from copy import deepcopy
-from itertools import combinations
 
 import numpy as np
 from rdkit.Chem.AllChem import CalcNumRotatableBonds, GetAdjacencyMatrix

@@ -9,7 +9,7 @@ from torch_scatter import scatter_add, scatter_max, scatter_mean
 from layers import EGCL, ConstrainedCrossAttention, IAGMN_Layer, SoftOneHot
 
 
-class DeepSLIP(nn.Module):
+class DeepICL(nn.Module):
     r""" """
 
     def __init__(

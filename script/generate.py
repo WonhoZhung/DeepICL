@@ -26,7 +26,7 @@ import utils
 from arguments import generate_args_parser
 from dataset import DataProcessor
 from layers import HardOneHot, SoftOneHot
-from model import DeepSLIP
+from model import DeepICL
 
 
 class Generator(DataProcessor):
@@ -126,13 +126,13 @@ class Generator(DataProcessor):
         return
 
     def _get_random_transformation(self, translation_coeff=0.2, rotation_coeff=PI / 90):
-        t = np.random.normal(0, translation_coeff, (1, 3))
+        T = np.random.normal(0, translation_coeff, (1, 3))
         unit_vec = np.random.normal(0, 1, (3,))
         unit_vec /= np.linalg.norm(unit_vec)
         angle = np.random.normal(0, rotation_coeff, (1,))
         rot_vec = angle * unit_vec
         R = Rotation.from_rotvec(rot_vec).as_matrix()
-        return torch.Tensor(t), torch.Tensor(R)
+        return torch.Tensor(T), torch.Tensor(R)
 
     def _pocket_coeff_scheduler(
         self,
@@ -507,7 +507,7 @@ def main():
         print("Device:", device)
 
     # 2. Model setting
-    model = DeepSLIP(args)
+    model = DeepICL(args)
     model = utils.initialize_model(model, args.ngpu > 0, args.restart_dir)
     generator = Generator(args, model, device)
 
