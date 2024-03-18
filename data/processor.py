@@ -522,7 +522,7 @@ class PDBbindDataProcessor:
             anion_indice = np.array(anion_indice)
             return anion_indice
 
-        def get_cation_atom_indices(mol, smarts_list=SALT_ANION_SMARTS) -> np.ndarray:
+        def get_cation_atom_indices(mol, smarts_list=SALT_CATION_SMARTS) -> np.ndarray:
             cation_indice = []
             for smarts in smarts_list:
                 smarts = Chem.MolFromSmarts(smarts)
