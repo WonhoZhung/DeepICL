@@ -57,21 +57,21 @@ For sampling ligands via DeepICL, run the following commands:
 cd script
 python -u generate.py --ncpu {NCPU} --k 8 --data_dir {DATA_DIR} --key_dir {KEY_DIR} --restart_dir {SAVED_MODEL_DIR} --result_dir {RESULT_DIR} --num_layers 6 --num_dense_layers 3 --num_hidden_feature 128 --num_sample {NUM_SAMPLE} --max_num_add_atom 30 --dist_one_hot_param1 0 10 25 --dist_one_hot_param2 0 15 300 --temperature_factor1 0.1 --temperature_factor2 0.1 --radial_limits 0.9 2.2 --add_noise --pocket_coeff_max 10.0 --pocket_coeff_thr 2.5 --pocket_coeff_beta 0.91 --conditional --use_condition --verbose -y --memo {MEMO for sampling details}
 ```
-Arguments:
-  --ncpu                number of CPUs for multiprocessing (int)
-  --data_dir            directory where processed data exist (str)
-  --key_dir             directory where key .pkl files exist (str)
-  --restart_dir         directory of the saved model .pt (str)
-  --result_dir          directory where the sampled ligands .sdf will be saved (str)
-  --num_sample          number of sampling for a single pocket (int)
-  --max_num_add_atom    maximum number of atoms to add during the sampling (int)
-  --temperature_factor1 temperature factor for controlling randomness of type selection (float)
-  --temperature_factor2 temperature factor for controlling randomness of position selection (float)
-  --conditional         if true, the model uses interaction condition for sampling (store_true)
-  --use_condition       deprecated, always true when --conditional is true (store_true)
-  --verbose             if true, verbose mode that print logs (store_true)
-  --y                   if true, recreate the restart directory without asking (store_true)
-  --memo                memo that specifies the sampling details (str)
+Arguments:   
+  --ncpu                number of CPUs for multiprocessing (int)   
+  --data_dir            directory where processed data exist (str)   
+  --key_dir             directory where key .pkl files exist (str)   
+  --restart_dir         directory of the saved model .pt (str)   
+  --result_dir          directory where the sampled ligands .sdf will be saved (str)   
+  --num_sample          number of sampling for a single pocket (int)   
+  --max_num_add_atom    maximum number of atoms to add during the sampling (int)   
+  --temperature_factor1 temperature factor for controlling randomness of type selection (float)   
+  --temperature_factor2 temperature factor for controlling randomness of position selection (float)   
+  --conditional         if true, the model uses interaction condition for sampling (store_true)   
+  --use_condition       deprecated, always true when --conditional is true (store_true)   
+  --verbose             if true, verbose mode that print logs (store_true)   
+  --y                   if true, recreate the restart directory without asking (store_true)   
+  --memo                memo that specifies the sampling details (str)   
 
 
 It took about a minute to generate 100 samples with 8 CPUs.
