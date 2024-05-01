@@ -27,8 +27,8 @@ def train_args_parser():
     parser.add_argument("--k", help="k for k-NN parameter", type=int)
 
     # MODEL SETTINGS
-    parser.add_argument("--num_layers", help="num layers", type=int)
-    parser.add_argument("--num_dense_layers", help="num dense layers", type=int)
+    parser.add_argument("--num_layers", help="num layers", type=int, default=6)
+    parser.add_argument("--num_dense_layers", help="num dense layers", type=int, default=3)
     parser.add_argument(
         "--num_ligand_atom_feature",
         help="ligand atom features",
@@ -41,8 +41,8 @@ def train_args_parser():
         type=int,
         default=utils.NUM_POCKET_ATOM_TYPES,
     )
-    parser.add_argument("--num_hidden_feature", help="num hidden features", type=int)
-    parser.add_argument("--num_latent_feature", help="num latent features", type=int)
+    parser.add_argument("--num_hidden_feature", help="num hidden features", type=int, default=128)
+    parser.add_argument("--num_latent_feature", help="num latent features", type=int, default=128)
     parser.add_argument("--gamma1", type=float, default=1e1)
     parser.add_argument("--gamma2", type=float, default=5e1)
     parser.add_argument(
@@ -69,7 +69,7 @@ def train_args_parser():
     parser.add_argument("--ssl", help="semi-supervised learning", action="store_true")
 
     # TRAINING SETTINGS
-    parser.add_argument("--num_epochs", help="num epochs", type=int)
+    parser.add_argument("--num_epochs", help="num epochs", type=int, default=1001)
     parser.add_argument("--lr", help="lr", type=float, default=1e-3)
     parser.add_argument("--lr_decay", help="lr_decay", type=float, default=0.8)
     parser.add_argument("--lr_tolerance", help="lr_tolerance", type=int, default=4)
