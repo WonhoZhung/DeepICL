@@ -37,6 +37,7 @@ For training DeepICL, run the following commands:
 cd script
 python -u train.py --world_size {NGPU} --save_dir {SAVE_DIR} --data_dir {DATA_DIR} --key_dir {KEY_DIR} --lr 1e-3 --num_epochs 1001 --save_every 1 --k 8 --lr_decay 0.8 --lr_tolerance 4 --lr_min 1e-6 --conditional
 ```
+```
 Arguments:
   --world_size      number of GPUs for DDP (int)
   --save_sir        directory where model .pt files will be saved (str)
@@ -50,12 +51,14 @@ Arguments:
   --lr_tolerance    lr scheduling parameter of how many epochs to tolerate (int)
   --lr_min          lr scheduling parameter of minimum lr (float)
   --conditional     if true, the model uses interaction condition during training - for ablation (store_true)
+```
 
 ## Ligand sampling
 For sampling ligands via DeepICL, run the following commands:
 ```
 cd script
 python -u generate.py --ncpu {NCPU} --k 8 --data_dir {DATA_DIR} --key_dir {KEY_DIR} --restart_dir {SAVED_MODEL_DIR} --result_dir {RESULT_DIR} --num_layers 6 --num_dense_layers 3 --num_hidden_feature 128 --num_sample {NUM_SAMPLE} --max_num_add_atom 30 --dist_one_hot_param1 0 10 25 --dist_one_hot_param2 0 15 300 --temperature_factor1 0.1 --temperature_factor2 0.1 --radial_limits 0.9 2.2 --add_noise --pocket_coeff_max 10.0 --pocket_coeff_thr 2.5 --pocket_coeff_beta 0.91 --conditional --use_condition --verbose -y --memo {MEMO for sampling details}
+```
 ```
 Arguments:   
   --ncpu                number of CPUs for multiprocessing (int)   
@@ -72,7 +75,7 @@ Arguments:
   --verbose             if true, verbose mode that print logs (store_true)   
   --y                   if true, recreate the restart directory without asking (store_true)   
   --memo                memo that specifies the sampling details (str)   
-
+```
 
 It took about a minute to generate 100 samples with 8 CPUs.
 
