@@ -466,7 +466,7 @@ class PDBbindDataProcessor:
         )
 
     def _get_complex_interaction_info_with_heuristics(
-        self, ligand_mol, pocket_mol, dist_cutoff=4.0
+        self, pocket_mol
     ):
         def get_hydrophobic_atom_indices(mol) -> np.ndarray:
             hydro_indice = []
@@ -534,11 +534,11 @@ class PDBbindDataProcessor:
             cation_indice = np.array(cation_indice)
             return cation_indice
 
-        lig_pos = ligand_mol.GetConformer(0).GetPositions()
-        poc_pos = pocket_mol.GetConformer(0).GetPositions()
-        dm = distance_matrix(lig_pos, poc_pos)
-        dm_min = np.min(dm, axis=0)
-        mask = np.where(dm_min < dist_cutoff, 1.0, 0.0)
+        #lig_pos = ligand_mol.GetConformer(0).GetPositions()
+        #poc_pos = pocket_mol.GetConformer(0).GetPositions()
+        #dm = distance_matrix(lig_pos, poc_pos)
+        #dm_min = np.min(dm, axis=0)
+        #mask = np.where(dm_min < dist_cutoff, 1.0, 0.0)
 
         anion_indice = get_anion_atom_indices(pocket_mol)
         cation_indice = get_cation_atom_indices(pocket_mol)
@@ -553,11 +553,11 @@ class PDBbindDataProcessor:
             hba_indice,
             hydro_indice,
             aromatic_indice,
-            mask,
+            None,
         )
 
     def _get_pocket_interaction_matrix(self, ligand_n, pocket_n, info):
-        anion, cation, hbd, hba, hydro, pipi, mask = info
+        anion, cation, hbd, hba, hydro, pipi, _ = info
         pocket_intr_vectors = []
         for i in range(pocket_n):
             if i + ligand_n in pipi:
@@ -576,8 +576,8 @@ class PDBbindDataProcessor:
                 vec = self._get_one_hot_vector("none", INTERACTION_TYPES)
             pocket_intr_vectors.append(vec)
         pocket_intr_mat = np.stack(pocket_intr_vectors, axis=0)
-        if mask is not None:
-            pocket_intr_mat = pocket_intr_mat * mask.reshape(-1, 1)
+        #if mask is not None:
+        #    pocket_intr_mat = pocket_intr_mat * mask.reshape(-1, 1)
         return pocket_intr_mat
 
     def _unlink_files(self, *files):
@@ -621,9 +621,13 @@ class PDBbindDataProcessor:
             complex_mol.GetNumAtoms(),
         )
         interaction_info = self._get_complex_interaction_info(complex_fn)
+        #interaction_info2 = self._get_complex_interaction_info_with_heuristics(pocket_mol) # interactable
         pocket_cond = self._get_pocket_interaction_matrix(
             ligand_n, pocket_n, interaction_info
         )
+        #pocket_cond2 = self._get_pocket_interaction_matrix(
+        #    0, pocket_n, interaction_info2
+        #) # interactable
 
         self._unlink_files(pocket_fn_2, complex_fn)
 
