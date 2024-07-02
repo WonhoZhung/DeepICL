@@ -84,6 +84,13 @@ It took about a minute to generate 100 samples with 8 CPUs.
 Ligand elaboration with a predefined core is demonstrated in this [Demo](https://drive.google.com/file/d/10uxhu7vUuEkefOe7yb2FeE-6Ekdfp8qR/view?usp=sharing).
 
 
+## (Update!) Ligand sampling without reference ligand (pocket-only)
+An interaction condition is set based on heuristics e.g. SMARTS patterns of amino acid residues.
+Since there is no reference ligand, this method needs additional inforamtion about the [x,y,z] coordinate of the initial point.
+
+Reference ligand-free sampling is demonstrated in this [Demo2](https://drive.google.com/file/d/1Sg2mIeFut66KjAhZBgM-1nPqSmc9g7lC/view?usp=sharing).
+
+
 ## Citing this work
 ```
 @article{Zhung2024,
