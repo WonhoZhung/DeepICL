@@ -91,7 +91,7 @@ Since there is no reference ligand, this method needs additional inforamtion abo
 Reference ligand-free sampling is demonstrated in this [Demo2](https://drive.google.com/file/d/1Sg2mIeFut66KjAhZBgM-1nPqSmc9g7lC/view?usp=sharing).
 
 ## (Update!) Ligands generated from CrossDocked2020 benchmark set
-100 ligands are generated for each pocket in CrossDocked2020 benchmark set, following the splitting method of [Luo et al.](https://arxiv.org/pdf/2203.10446).
+100 ligands are generated for each pocket in CrossDocked2020 benchmark set, following the splitting method of [Luo et al.](https://arxiv.org/pdf/2203.10446)
 Note that DeepICL was trained on PDBbind v.2020, thus an overlap of pockets between the training set and CrossDocked2020 test set may exist.
 
 
