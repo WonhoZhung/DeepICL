@@ -17,6 +17,7 @@ from Bio.PDB import PDBIO, PDBParser
 from Bio.PDB.PDBIO import Select
 from plip.structure.preparation import PDBComplex
 from scipy.spatial import distance_matrix
+import torch
 
 
 DATA_DIR = "" ## directory to PDBbind v2020 general set 
@@ -158,7 +159,7 @@ def calc_free_sasa(mol):
     return sasa
 
 
-class PDBbindDataProcessor:
+class DataProcessor:
     def __init__(
         self,
         data_dir=DATA_DIR,
@@ -166,15 +167,11 @@ class PDBbindDataProcessor:
         max_atom_num=MAX_ATOM_NUM,  # maximum number of ligand atoms
         max_add_atom_num=MAX_ADD_ATOM_NUM,  # maximum number of ligand atoms to add 
         seed=SEED,
-        use_whole_protein=False,
-        predefined_scaffold=None,
+        tmp_dir="./temp/"
     ):
         self.data_dir = data_dir
-        self.ligand_data_dir = f"{data_dir}/????/????_ligand.sdf"
-        self.pocket_data_dir = f"{data_dir}/????/????_protein.pdb"
+
         self.save_dir = save_dir
-        self.use_whole_protein = use_whole_protein
-        self.predefined_scaffold = predefined_scaffold
         if self.save_dir[-1] != "/":
             self.save_dir += "/"
         self.seed = seed
@@ -184,6 +181,95 @@ class PDBbindDataProcessor:
         self.max_atom_num = max_atom_num
         self.max_add_atom_num = max_add_atom_num
 
+        self.ligand_data_fns = []
+        self.pocket_data_fns = []
+        assert len(self.ligand_data_fns) == len(
+            self.pocket_data_fns
+        ), "Different ligand and pocket number"
+        self.num_data = len(self.ligand_data_fns)
+
+        self._tmp_dir = tmp_dir
+
+    def __len__(
+        self,
+    ):
+        return self.num_data
+
+    def _filter_ligand(self, ligand_mol):
+        raise NotImplementedError
+
+    def _filter_pocket(self, pocket_mol):
+        raise NotImplementedError
+
+    def _get_one_hot_vector(self, item, item_list, use_unk=True):
+        if item not in item_list:
+            if use_unk:
+                ind = -1
+            else:
+                print(f"Item not in the list: {item}")
+                exit()
+        else:
+            ind = item_list.index(item)
+
+        if use_unk:
+            return list(np.eye(len(item_list) + 1)[ind])
+        else:
+            return list(np.eye(len(item_list))[ind])
+
+    def _get_ligand_atom_features(self, ligand_mol):
+        raise NotImplementedError
+
+    def _get_pocket_atom_features(self, pocket_mol, pocket_str):
+        raise NotImplementedError
+
+    def _unlink_files(self, *files):
+        for path in files:
+            os.unlink(path)
+
+    def _processor(self, ligand_fn, pocket_fn):
+        """
+        Main part of the data processing
+        """
+        raise NotImplementedError
+
+    def run(self, idx):
+        data = self._processor(self.ligand_data_fns[idx], self.pocket_data_fns[idx])
+        if data is None:
+            print(self.keys[idx], flush=True)
+            return
+        with open(self.save_dir + self.keys[idx], "wb") as w:
+            pickle.dump(data, w)
+        return
+
+
+
+class PDBbindDataProcessor(DataProcessor):
+
+    def __init__(
+            self, 
+            data_dir=DATA_DIR,
+            save_dir=SAVE_DIR,
+            max_atom_num=MAX_ATOM_NUM,  # maximum number of ligand atoms
+            max_add_atom_num=MAX_ADD_ATOM_NUM,  # maximum number of ligand atoms to add 
+            seed=SEED,
+            use_whole_protein=False,
+            predefined_scaffold=None,
+        ):
+        super().__init__(
+            data_dir=data_dir,
+            save_dir=save_dir,
+            max_atom_num=max_atom_num,  # maximum number of ligand atoms
+            max_add_atom_num=max_add_atom_num,  # maximum number of ligand atoms to add 
+            seed=seed,
+            tmp_dir="./temp/"
+        )
+
+        self.ligand_data_dir = f"{data_dir}/????/????_ligand.sdf"
+        self.pocket_data_dir = f"{data_dir}/????/????_protein.pdb"
+
+        self.use_whole_protein = use_whole_protein
+        self.predefined_scaffold = predefined_scaffold
+
         self.ligand_data_fns = sorted(glob.glob(self.ligand_data_dir))
         self.pocket_data_fns = sorted(glob.glob(self.pocket_data_dir))
         assert len(self.ligand_data_fns) == len(
@@ -191,15 +277,7 @@ class PDBbindDataProcessor:
         ), "Different ligand and pocket number"
         self.num_data = len(self.ligand_data_fns)
         self.keys = [s.split("/")[-2] for s in self.ligand_data_fns]
-
-        self._processed_keys = []
-        self._tmp_dir = "/trash/" ## directory of a template file
-
-    def __len__(
-        self,
-    ):
-        return self.num_data
-
+    
     def _filter_ligand(self, ligand_mol):
         if ligand_mol is None:
             # print("ligand_mol is None")
@@ -208,7 +286,7 @@ class PDBbindDataProcessor:
             # print("Invalid atom type in ligand")
             return False
         if not ligand_mol.GetNumAtoms() <= self.max_atom_num:
-            # print("Exceed max ligand atom num")
+            print("Exceed max ligand atom num")
             return False
         if not len(ligand_mol.GetConformers()) == 1:
             # print("None or more than one ligand conformer")
@@ -279,21 +357,6 @@ class PDBbindDataProcessor:
         scaff_mol = new_mol.GetMol()
         conf = scaff_mol.AddConformer(new_conf, assignId=True)
         return scaff_mol
-
-    def _get_one_hot_vector(self, item, item_list, use_unk=True):
-        if item not in item_list:
-            if use_unk:
-                ind = -1
-            else:
-                print(f"Item not in the list: {item}")
-                exit()
-        else:
-            ind = item_list.index(item)
-
-        if use_unk:
-            return list(np.eye(len(item_list) + 1)[ind])
-        else:
-            return list(np.eye(len(item_list))[ind])
 
     def _get_ligand_atom_features(self, ligand_mol):
         atom_feature_list = []
@@ -396,7 +459,7 @@ class PDBbindDataProcessor:
             io.save(path, NonHeteroSelect())
         else:
             io.save(path, DistSelect())
-        m2 = Chem.MolFromPDBFile(path)
+        m2 = Chem.MolFromPDBFile(path, sanitize=False)
         structure2 = parser.get_structure("pocket", path)
         os.close(fd)
         return m2, structure2, path
@@ -465,97 +528,6 @@ class PDBbindDataProcessor:
             None,
         )
 
-    def _get_complex_interaction_info_with_heuristics(
-        self, pocket_mol
-    ):
-        def get_hydrophobic_atom_indices(mol) -> np.ndarray:
-            hydro_indice = []
-            natoms = mol.GetNumAtoms()
-            for atom_idx in range(natoms):
-                atom = mol.GetAtomWithIdx(atom_idx)
-                symbol = atom.GetSymbol()
-                if symbol.upper() in HYDROPHOBICS:
-                    hydro_indice += [atom_idx]
-                elif symbol.upper() in ["C"]:
-                    neighbors = [x.GetSymbol() for x in atom.GetNeighbors()]
-                    neighbors_wo_c = list(set(neighbors) - set(["C"]))
-                    if len(neighbors_wo_c) == 0:
-                        hydro_indice += [atom_idx]
-            hydro_indice = np.array(hydro_indice)
-            return hydro_indice
-
-        def get_aromatic_atom_indices(mol) -> np.ndarray:
-            aromatic_indice = []
-            natoms = mol.GetNumAtoms()
-            for atom_idx in range(natoms):
-                atom = mol.GetAtomWithIdx(atom_idx)
-                if atom.GetIsAromatic():
-                    aromatic_indice += [atom_idx]
-            aromatic_indice = np.array(aromatic_indice)
-            return aromatic_indice
-
-        def get_hbd_atom_indices(mol, smarts_list=HBOND_DONOR_SMARTS) -> np.ndarray:
-            hbd_indice = []
-            for smarts in smarts_list:
-                smarts = Chem.MolFromSmarts(smarts)
-                hbd_indice += [idx[0] for idx in mol.GetSubstructMatches(smarts)]
-            hbd_indice = np.array(hbd_indice)
-            return hbd_indice
-
-        def get_hba_atom_indices(mol, smarts_list=HBOND_ACCEPTOR_SMARTS) -> np.ndarray:
-            hba_indice = []
-            for smarts in smarts_list:
-                smarts = Chem.MolFromSmarts(smarts)
-                hba_indice += [idx[0] for idx in mol.GetSubstructMatches(smarts)]
-            hba_indice = np.array(hba_indice)
-            return hba_indice
-
-        def get_anion_atom_indices(mol, smarts_list=SALT_ANION_SMARTS) -> np.ndarray:
-            anion_indice = []
-            for smarts in smarts_list:
-                smarts = Chem.MolFromSmarts(smarts)
-                for indices in mol.GetSubstructMatches(smarts):
-                    for idx in indices:
-                        atom = mol.GetAtomWithIdx(idx)
-                        if atom.GetSymbol().upper() != "C":
-                            anion_indice += [idx]
-            anion_indice = np.array(anion_indice)
-            return anion_indice
-
-        def get_cation_atom_indices(mol, smarts_list=SALT_CATION_SMARTS) -> np.ndarray:
-            cation_indice = []
-            for smarts in smarts_list:
-                smarts = Chem.MolFromSmarts(smarts)
-                for indices in mol.GetSubstructMatches(smarts):
-                    for idx in indices:
-                        atom = mol.GetAtomWithIdx(idx)
-                        if atom.GetSymbol().upper() != "C":
-                            cation_indice += [idx]
-            cation_indice = np.array(cation_indice)
-            return cation_indice
-
-        #lig_pos = ligand_mol.GetConformer(0).GetPositions()
-        #poc_pos = pocket_mol.GetConformer(0).GetPositions()
-        #dm = distance_matrix(lig_pos, poc_pos)
-        #dm_min = np.min(dm, axis=0)
-        #mask = np.where(dm_min < dist_cutoff, 1.0, 0.0)
-
-        anion_indice = get_anion_atom_indices(pocket_mol)
-        cation_indice = get_cation_atom_indices(pocket_mol)
-        hbd_indice = get_hbd_atom_indices(pocket_mol)
-        hba_indice = get_hba_atom_indices(pocket_mol)
-        hydro_indice = get_hydrophobic_atom_indices(pocket_mol)
-        aromatic_indice = get_aromatic_atom_indices(pocket_mol)
-        return (
-            anion_indice,
-            cation_indice,
-            hbd_indice,
-            hba_indice,
-            hydro_indice,
-            aromatic_indice,
-            None,
-        )
-
     def _get_pocket_interaction_matrix(self, ligand_n, pocket_n, info):
         anion, cation, hbd, hba, hydro, pipi, _ = info
         pocket_intr_vectors = []
@@ -602,10 +574,10 @@ class PDBbindDataProcessor:
             )  # , "pocket str is None" # BioPython Structure object
 
             ligand_mol = Chem.RemoveHs(ligand_mol)
-            pocket_mol = Chem.RemoveHs(pocket_mol)
+            pocket_mol = Chem.RemoveHs(pocket_mol, sanitize=False)
 
-            assert self._filter_ligand(ligand_mol)  # , ligand_fn.split('/')[-1]
-            assert self._filter_pocket(pocket_mol)  # , pocket_fn.split('/')[-1]
+            assert self._filter_ligand(ligand_mol), ligand_fn.split('/')[-1]
+            assert self._filter_pocket(pocket_mol), pocket_fn.split('/')[-1]
 
             complex_mol, complex_fn = self._join_complex(ligand_fn, pocket_fn_2)
 
@@ -615,19 +587,14 @@ class PDBbindDataProcessor:
             print(traceback.format_exc())
             return
 
-        ligand_n, pocket_n, complex_n = (
+        ligand_n, pocket_n = (
             ligand_mol.GetNumAtoms(),
             pocket_mol.GetNumAtoms(),
-            complex_mol.GetNumAtoms(),
         )
         interaction_info = self._get_complex_interaction_info(complex_fn)
-        #interaction_info2 = self._get_complex_interaction_info_with_heuristics(pocket_mol) # interactable
         pocket_cond = self._get_pocket_interaction_matrix(
             ligand_n, pocket_n, interaction_info
         )
-        #pocket_cond2 = self._get_pocket_interaction_matrix(
-        #    0, pocket_n, interaction_info2
-        #) # interactable
 
         self._unlink_files(pocket_fn_2, complex_fn)
 
@@ -767,7 +734,50 @@ class PDBbindDataProcessor:
         with open(self.save_dir + self.keys[idx], "wb") as w:
             pickle.dump(data, w)
         return
+    
 
+class CrossDockedDataProcessor(PDBbindDataProcessor):
+
+    def __init__(
+            self,
+            split_dir,
+            mode="test", # ["train", "test", "val"]
+            data_dir=DATA_DIR,
+            save_dir=SAVE_DIR,
+            max_atom_num=MAX_ATOM_NUM,  # maximum number of ligand atoms
+            max_add_atom_num=MAX_ADD_ATOM_NUM,  # maximum number of ligand atoms to add 
+            seed=SEED,
+            use_whole_protein=False,
+            predefined_scaffold=None,
+        ):
+        super().__init__(
+            data_dir=data_dir,
+            save_dir=save_dir,
+            max_atom_num=max_atom_num,  # maximum number of ligand atoms
+            max_add_atom_num=max_add_atom_num,  # maximum number of ligand atoms to add 
+            seed=seed,
+            use_whole_protein=use_whole_protein,
+            predefined_scaffold=predefined_scaffold,
+        )
+
+        self.split_data = torch.load(split_dir)
+        if mode == "train":
+            self.data = self.split_data[mode]
+        elif mode == "val":
+            self.data = self.split_data[mode]
+        elif mode == "test":
+            self.data = self.split_data[mode]
+        else:
+            print("Wrong mode")
+            exit(-1)
+        self.ligand_data_fns = [os.path.join(self.data_dir, s[1]) for s in self.data]
+        self.pocket_data_fns = [os.path.join(self.data_dir, s[0]) for s in self.data]
+        assert len(self.ligand_data_fns) == len(
+            self.pocket_data_fns
+        ), "Different ligand and pocket number"
+        self.num_data = len(self.ligand_data_fns)
+        self.keys = [f"{i}_{s.split('/')[-2]}" for i, s in enumerate(self.ligand_data_fns)]
+    
 
 if __name__ == "__main__":
 

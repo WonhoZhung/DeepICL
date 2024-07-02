@@ -151,5 +151,7 @@ if __name__ == "__main__":
     )
 
     print(f"TOTAL VALIDITY: {val:.2f}")
-    print(f"TOTAL UNIQUNESS: {uni:.2f}")
-    print(f"TOTAL NOVELTY: {nov:.2f}")
+    if args.filter_level > 1 or args.filter_level == 0:
+        print(f"TOTAL UNIQUNESS: {uni:.2f}")
+    if args.filter_level > 2 or args.filter_level == 0:
+        print(f"TOTAL NOVELTY: {nov:.2f}")

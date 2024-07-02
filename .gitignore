@@ -1,2 +1,6 @@
 /temp
 /data/__pycache__
+/script/__pycache__
+/crossdocked/data
+/crossdocked/original
+/crossdocked/sampled_ligands
